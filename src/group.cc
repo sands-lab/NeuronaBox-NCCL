@@ -5,10 +5,13 @@
  ************************************************************************/
 
 #include "group.h"
+#include "channel.h"
+#include "coordinator.h"
 #include "debug.h"
 #include "enqueue.h"
+#include "include/debug.h"
+#include "include/nccl_common.h"
 #include "transport.h"
-#include "channel.h"
 #include <assert.h>
 
 __thread int ncclGroupDepth = 0; // depth of ncclGroupStart nesting
@@ -112,6 +115,7 @@ ncclResult_t ncclPreconnectFunc(struct ncclAsyncJob* job_) {
 }
 
 static ncclResult_t doLaunches(struct ncclComm* head) {
+  LOG_MOD(NCCL_MOD, "do launches");
   ncclResult_t result = ncclSuccess;
   struct ncclComm* cliqueComm0 = head->intraComm0;
   struct ncclComm* cliqueHead = head;
@@ -176,6 +180,11 @@ static ncclResult_t doLaunches(struct ncclComm* head) {
     }
     cliqueHead = cliqueNextHead;
   } while (cliqueHead != nullptr);
+  LOG_MOD(NCCL_MOD, "do launches finished!");
+  if (MOD_KERNEL_BYPASS) {
+    NCCLCHECK(ncclModSync());
+    LOG_MOD(NCCL_MOD, "nccl kernel launch success and synced");
+  }
 failure:
   return result;
 }
@@ -274,6 +283,7 @@ static ncclResult_t groupLaunch(struct ncclAsyncJob *job_) {
   CUDACHECKGOTO(cudaGetDevice(&savedDev), ret, fail);
 
   if (groupCommPreconnectHeadMain != nullptr) {
+    LOG_MOD(NCCL_MOD, "groupCommPreconnectHeadMain != nullptr");
     struct ncclComm* comm = groupCommPreconnectHeadMain;
     do {
       struct ncclPreconnectJob* job;
@@ -295,6 +305,7 @@ static ncclResult_t groupLaunch(struct ncclAsyncJob *job_) {
   if (!ncclIntruQueueEmpty(asyncJobsMain)) {
     struct ncclAsyncJob* job = ncclIntruQueueHead(asyncJobsMain);
     do {
+      LOG_MOD(NCCL_MOD, "pthread create async job %p", job);
       SYSCHECKGOTO(pthread_create(&job->thread, nullptr, ncclAsyncJobMain, job), ret, fail);
       job = job->next;
     } while (job != nullptr);
@@ -334,7 +345,6 @@ static ncclResult_t groupLaunch(struct ncclAsyncJob *job_) {
 
     if (ret != ncclSuccess) goto fail;
   }
-
   if (groupCommHeadMain != nullptr) {
     NCCLCHECKGOTO(doLaunches(groupCommHeadMain), ret, fail);
   }
@@ -357,7 +367,7 @@ static ncclResult_t groupLaunch(struct ncclAsyncJob *job_) {
   }
 
   CUDACHECK(cudaSetDevice(savedDev));
-
+  LOG_MOD(NCCL_MOD, "group launch before exit");
 exit:
   return ret;
 fail:
@@ -388,6 +398,7 @@ ncclResult_t ncclGroupEndInternal() {
     ncclGroupJobMain.initialized = true;
     ncclGroupJobMainPtr = &ncclGroupJobMain;
     /* make sure ncclGroupBlocking has been set. */
+    LOG_MOD(NCCL_MOD, "nccl groupblocking %d", ncclGroupBlocking);
     assert(ncclGroupBlocking == 0 || ncclGroupBlocking == 1);
     if (ncclGroupBlocking == 0 && (ncclGroupCommPreconnectHead != nullptr || !ncclIntruQueueEmpty(&ncclAsyncJobs))) {
       /* nonblocking group */
@@ -409,17 +420,17 @@ ncclResult_t ncclGroupEndInternal() {
           comm = comm->groupNext;
         } while (comm);
       }
-
+      LOG_MOD(NCCL_MOD, "group launch async");
       ncclGroupJobMainPtr->base.func = groupLaunch;
       SYSCHECKGOTO(pthread_create(&ncclGroupJobMainPtr->base.thread, NULL, ncclAsyncJobMain, (void*)&ncclGroupJobMainPtr->base), ret, fail);
       ret = ncclInProgress;
     } else {
       /* blocking group */
+      LOG_MOD(NCCL_MOD, "group launch blocking");
       NCCLCHECKGOTO(groupLaunch(&ncclGroupJobMainPtr->base), ret, fail);
       groupResetJobState(ncclGroupJobMainPtr);
     }
   }
-
 exit:
   return ret;
 fail:

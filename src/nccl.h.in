@@ -34,15 +34,18 @@ typedef struct ncclComm* ncclComm_t;
 typedef struct { char internal[NCCL_UNIQUE_ID_BYTES]; } ncclUniqueId;
 
 /* Error type */
-typedef enum { ncclSuccess                 =  0,
-               ncclUnhandledCudaError      =  1,
-               ncclSystemError             =  2,
-               ncclInternalError           =  3,
-               ncclInvalidArgument         =  4,
-               ncclInvalidUsage            =  5,
-               ncclRemoteError             =  6,
-               ncclInProgress              =  7,
-               ncclNumResults              =  8 } ncclResult_t;
+typedef enum {
+  ncclSuccess = 0,
+  ncclUnhandledCudaError = 1,
+  ncclSystemError = 2,
+  ncclInternalError = 3,
+  ncclInvalidArgument = 4,
+  ncclInvalidUsage = 5,
+  ncclRemoteError = 6,
+  ncclInProgress = 7,
+  ncclNumResults = 8,
+  ncclModError = 9
+} ncclResult_t;
 
 #define NCCL_CONFIG_UNDEF_INT INT_MIN
 #define NCCL_CONFIG_UNDEF_PTR NULL
@@ -433,6 +436,14 @@ ncclResult_t pncclCommRegister(const ncclComm_t comm, void* buff, size_t size, v
 /* Deregister CUDA buffer */
 ncclResult_t  ncclCommDeregister(const ncclComm_t comm, void* handle);
 ncclResult_t pncclCommDeregister(const ncclComm_t comm, void* handle);
+
+//!
+/*
+ * Mod Sync
+ * Only used for emulator
+ * Sync the coordinator state
+ */
+ncclResult_t ncclModSync();
 
 #ifdef __cplusplus
 } // end extern "C"

@@ -20,7 +20,7 @@ MANIFEST := $(OBJDIR)/manifest
 DEVGLUE_OBJ  := $(OBJDIR)/device_glue.o
 
 INCFLAGS  = -I. -I.. -I$(BUILDDIR)/include -I../include
-NVCUFLAGS += $(INCFLAGS) --compiler-options "-fPIC -fvisibility=hidden"
+NVCUFLAGS += $(INCFLAGS) --compiler-options "-fPIC -fvisibility=hidden" -Wno-deprecated-gpu-targets
 CXXFLAGS  += $(INCFLAGS)
 
 SAY = @bash -c 'path="$$2"; [[ "$$(realpath "$$2")" =~ ^$(subst .,\.,$(abspath $(NCCLDIR)))/(.*)$$ ]] && path="$${BASH_REMATCH[1]}"; printf "%-15s %s\n" "$$1" "$$path"' SAY

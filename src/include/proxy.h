@@ -46,8 +46,13 @@ struct ncclProxyOp {
     // For use by enqueue.cc
     struct ncclProxyOp *enqNext;
   };
+
+  //! emulator mod
+  uint64_t unique_id;
 };
-static_assert(sizeof(struct ncclProxyOp) == 64, "Keep ProxyOp aligned with cache lines for effective prefetch");
+//! mod this
+// static_assert(sizeof(struct ncclProxyOp) == 64, "Keep ProxyOp aligned with
+// cache lines for effective prefetch");
 
 struct ncclProxySubArgs {
   struct ncclProxyConnection* connection;
@@ -68,6 +73,9 @@ struct ncclProxySubArgs {
   void* profilingEvents[NCCL_STEPS];
   void* recvRequestsCache[NCCL_STEPS];
   int recvRequestsSubCount;
+
+  //! emulator mod
+  uint64_t unique_id;
 };
 
 struct ncclProxyArgs {
@@ -93,6 +101,9 @@ struct ncclProxyArgs {
   struct ncclProxyArgs* next;
   struct ncclProxyArgs* nextPeer;
   struct ncclProxyArgs** proxyAppendPtr;
+
+  //! emulator mod
+  uint64_t unique_id;
 };
 #define NCCL_MAX_NETDEVS 128
 

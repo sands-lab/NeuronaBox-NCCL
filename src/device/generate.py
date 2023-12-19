@@ -373,7 +373,7 @@ for name in name_to_funcs.keys():
       '#include "{lower_coll}.h"\n'
       .format(lower_coll=coll_camel_to_lower[coll])
     )
-
+    print(f"Generating {name}")
     (_, kfns) = name_to_kernels.get(name) or (None, [])
     for kfn in kfns:
       (coll, redop, ty, algo, proto) = kfn
@@ -387,6 +387,7 @@ for name in name_to_funcs.keys():
         .format(sym=sym, coll=coll, redop_cxx=redop_to_cxx[redop], ty_cxx=ty_to_cxx[ty],
                 algo=(algo or "RING"), proto=(proto or "SIMPLE"), fn_id=fn_id)
       )
+      print("   Kernel({sym}, {coll}, {redop_cxx}, {ty_cxx}, {algo}, {proto}, {fn_id})\n".format(sym=sym, coll=coll, redop_cxx=redop_to_cxx[redop], ty_cxx=ty_to_cxx[ty], algo=(algo or "RING"), proto=(proto or "SIMPLE"), fn_id=fn_id))
       if (cudart, arch) != (0, 0):
         out("#endif\n")
 
@@ -401,5 +402,6 @@ for name in name_to_funcs.keys():
         .format(sym=sym, coll=coll, redop_cxx=redop_to_cxx[redop], ty_cxx=ty_to_cxx[ty],
                 algo=(algo or "RING"), proto=(proto or "SIMPLE"))
       )
+      print(f"  {sym}")
       if (cudart, arch) != (0, 0):
         out("#endif\n")

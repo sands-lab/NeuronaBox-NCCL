@@ -4,29 +4,30 @@
  * See LICENSE.txt for license information
  ************************************************************************/
 
-#include "nccl.h"
-#include "channel.h"
-#include "nvmlwrap.h"
-#include "gdrwrap.h"
-#include "bootstrap.h"
-#include "transport.h"
-#include "group.h"
-#include "net.h"
-#include "coll_net.h"
-#include "enqueue.h"
-#include "graph.h"
 #include "argcheck.h"
+#include "bootstrap.h"
+#include "channel.h"
+#include "coll_net.h"
+#include "coordinator.h"
+#include "enqueue.h"
+#include "gdrwrap.h"
+#include "graph.h"
+#include "group.h"
+#include "nccl.h"
+#include "net.h"
+#include "nvmlwrap.h"
+#include "param.h"
+#include "transport.h"
 #include "tuner.h"
-#include <fcntl.h>
-#include <string.h>
-#include <errno.h>
 #include <assert.h>
 #include <dlfcn.h>
-#include <sys/types.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <string.h>
+#include <string>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
-#include "param.h"
-
 #define STR2(v) #v
 #define STR(v) STR2(v)
 
@@ -517,6 +518,18 @@ static ncclResult_t setupChannel(struct ncclComm* comm, int channelId, int rank,
   for (int i=0; i<nranks; i++) {
     ring->userRanks[i] = ringRanks[(i+ixRank)%nranks];
   }
+  std::string ringStr, ringranks;
+  for (int i = 0; i < nranks; i++) {
+    ringStr += std::to_string(ring->userRanks[i]) + " ";
+    ringranks += std::to_string(ringRanks[i]) + " ";
+  }
+  LOG_MOD(NCCL_MOD,
+          "rank=%d Index=%d ChannelId=%d RingRanks: %s RingUserRank : %s, "
+          "prev:%d, next:%d",
+          rank, ring->index, channelId, ringranks.c_str(), ringStr.c_str(),
+          ring->prev, ring->next);
+  modTopologyUpdateMap(&global_topology, rank, channelId, ring, ringRanks,
+                       nranks);
   return ncclSuccess;
 }
 
@@ -566,6 +579,7 @@ NCCL_PARAM(NvbPreconnect, "NVB_PRECONNECT", 1);
 NCCL_PARAM(AllocP2pNetLLBuffers, "ALLOC_P2P_NET_LL_BUFFERS", 0);
 
 static ncclResult_t collNetTrySetup(ncclComm_t comm, ncclComm_t parent, struct ncclTopoGraph* collNetGraph) {
+  LOG_MOD(NCCL_MOD, "collnet try setup");
   ncclResult_t ret = ncclSuccess;
   int* heads = NULL;
   int rank = comm->rank;
@@ -772,6 +786,8 @@ static ncclResult_t initTransportsRank(struct ncclComm* comm, struct ncclComm* p
   // We use 2 AllGathers
   // 1. { peerInfo, comm, compCap}
   // 2. { nChannels, graphInfo, topoRanks }
+
+  LOG_MOD(NCCL_MOD, "init transport rank");
   ncclResult_t ret = ncclSuccess;
   int rank = comm->rank;
   int nranks = comm->nRanks;
@@ -1347,6 +1363,9 @@ fail:
 }
 
 static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
+  LOG_MOD(NCCL_MOD, "nccl comm init rank func");
+  NCCLCHECK(modGetAllEnvVars());
+
   struct ncclCommInitRankAsyncJob* job = (struct ncclCommInitRankAsyncJob*)job_;
   ncclComm_t comm = job->comm;
   ncclResult_t res = ncclSuccess;
@@ -1594,6 +1613,7 @@ fail:
 }
 
 static ncclResult_t ncclCommInitRankDev(ncclComm_t* newcomm, int nranks, ncclUniqueId commId, int myrank, int cudaDev, ncclConfig_t *config) {
+  LOG_MOD(NCCL_MOD, "nccl comm init rank dev");
   ncclResult_t res = ncclSuccess;
   ncclComm_t comm = NULL;
   struct ncclCommInitRankAsyncJob *job = NULL;
@@ -1663,6 +1683,7 @@ ncclResult_t ncclCommInitRank(ncclComm_t* newcomm, int nranks, ncclUniqueId comm
   // Load the CUDA driver and dlsym hooks (can fail on old drivers)
   (void)ncclCudaLibraryInit();
 
+  LOG_MOD(NCCL_MOD, "API nccl comm init rank");
   int cudaDev;
   ncclConfig_t config = NCCL_CONFIG_INITIALIZER;
   CUDACHECK(cudaGetDevice(&cudaDev));
@@ -1722,6 +1743,7 @@ ncclResult_t ncclCommInitAll(ncclComm_t* comms, int ndev, const int* devlist) {
   NCCLCHECKGOTO(ncclGetUniqueId(&uniqueId), ret, fail);
   NCCLCHECKGOTO(ncclGroupStart(), ret, fail);
   for (int i=0; i<ndev; i++) {
+    LOG_MOD(NCCL_MOD, "ncclCommitInitRankDev %d", i);
     // Ignore return codes .. we need to call ncclGroupEnd to clean up anyway
     ncclCommInitRankDev(comms+i, ndev, uniqueId, i, devlist ? devlist[i] : i, &config);
   }

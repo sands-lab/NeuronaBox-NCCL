@@ -6,13 +6,15 @@
 
 #include "enqueue.h"
 #include "argcheck.h"
-#include "coll_net.h"
-#include "gdrwrap.h"
 #include "bootstrap.h"
 #include "channel.h"
+#include "coll_net.h"
 #include "cudawrap.h"
+#include "gdrwrap.h"
+#include "include/debug.h"
+#include "include/nccl_common.h"
 #include "transport.h"
-
+#include "coordinator.h"
 #include <cstring> // std::memcpy
 #include <cinttypes> // PRIx64
 
@@ -471,7 +473,7 @@ static ncclResult_t scheduleCollTasksToPlan(
     struct ncclComm* comm, struct ncclKernelPlan* plan, int* nWorkBudget
   ) {
   struct ncclTasks* tasks = &comm->tasks;
-
+  LOG_MOD(NCCL_MOD, "scheduleCollTasksToPlan");
   size_t bytePerChannel[/*collNetSupport*/2];
   if (comm->channelSize > 0) {
     // Set by user
@@ -581,6 +583,7 @@ static ncclResult_t scheduleCollTasksToPlan(
 
       plan->threadPerBlock = std::max(plan->threadPerBlock, info.nThreads);
       if (!plan->kernelSpecialized) {
+        LOG_MOD(NCCL_MOD, "fill kernal with workfuncindex = %d", workFuncIndex);
         plan->kernelFn = ncclDevKernelForFunc[workFuncIndex];
         plan->kernelSpecialized = ncclDevKernelForFuncIsSpecialized[workFuncIndex];
       }
@@ -1040,6 +1043,7 @@ NCCL_PARAM(MemSyncDomain, "MEM_SYNC_DOMAIN", cudaLaunchMemSyncDomainRemote);
 #endif
 
 ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan) {
+  LOG_MOD(NCCL_MOD, "nccl lanunch kernel");
   struct ncclTasks* tasks = &comm->tasks;
   void *fn = plan->kernelFn;
   cudaStream_t launchStream = tasks->streams->stream;
@@ -1089,13 +1093,22 @@ ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan
     launchConfig.attrs = launchAttrs;
     launchConfig.numAttrs = attrs;
     launchConfig.stream = launchStream;
-
-    CUDACHECK(cudaLaunchKernelExC(&launchConfig, fn, args));
+//! comment cudaLaunchKernelExc
+    if (MOD_KERNEL_BYPASS) {
+      LOG_MOD(NCCL_MOD, "bypass kernel launch exc define");
+    } else {
+      CUDACHECK(cudaLaunchKernelExC(&launchConfig, fn, args));
+    }
     return ncclSuccess;
   }
   #endif
   // Standard kernel launch
-  CUDACHECK(cudaLaunchKernel(fn, grid, block, args, smem, launchStream));
+  //! comment cudaLaunchKernel
+  if (MOD_KERNEL_BYPASS) {
+    LOG_MOD(NCCL_MOD, "bypass kernel launch");
+  } else {
+    CUDACHECK(cudaLaunchKernel(fn, grid, block, args, smem, launchStream));
+  }
   return ncclSuccess;
 }
 
@@ -1116,6 +1129,7 @@ ncclResult_t ncclLaunchKernelAfter_NoCuda(struct ncclComm* comm, struct ncclKern
 }
 
 ncclResult_t ncclLaunchFinish(struct ncclComm* comm) {
+  LOG_MOD(NCCL_MOD, "nccl launchfinish enter");
   ncclResult_t result = ncclSuccess;
   struct ncclTasks* tasks = &comm->tasks;
   tasks->collBytesTotal = 0; // Just in case subtraction during scheduleCollTasksToPlan() doesn't get to 0
@@ -1148,6 +1162,7 @@ ncclResult_t ncclLaunchFinish(struct ncclComm* comm) {
     NCCLCHECKGOTO(ncclStrongStreamRelease(tasks->capturingGraph, &comm->sharedRes->deviceStream), result, resume3);
   resume3:;
   }
+  LOG_MOD(NCCL_MOD, "nccl launchfinish exit");
   return result;
 }
 
@@ -1221,6 +1236,7 @@ static ncclResult_t topoGetAlgoInfo(struct ncclInfo* info, int collNetSupport, i
   int nc = (info->nChannels > 0) ? info->nChannels : comm->nChannels;
   int nt = comm->maxThreads[info->algorithm][info->protocol];
   int threadThreshold = comm->threadThresholds[info->algorithm][info->protocol];
+  // LOG_MOD(NCCL_MOD, "originally nc=%d, nt=%d, threadThreshold=%d, nbytes=%d", nc, nt, threadThreshold, info->nBytes);
   if (info->algorithm == NCCL_ALGO_COLLNET_DIRECT) {
     // CollNet channel tuning
     int ncSwitch = 16;
@@ -1243,6 +1259,7 @@ static ncclResult_t topoGetAlgoInfo(struct ncclInfo* info, int collNetSupport, i
       else break;
     }
   }
+  // LOG_MOD(NCCL_MOD, "tuned nc=%d, nt=%d, threadThreshold=%d, nbytes=%d", nc, nt, threadThreshold, info->nBytes);
   if (info->protocol == NCCL_PROTO_SIMPLE) {
     if (info->algorithm == NCCL_ALGO_RING) nt += WARP_SIZE; // Extra warp for sync
     // More threads or sync warps needed due to split thread model
@@ -1326,10 +1343,10 @@ static ncclResult_t getLoopInfo(struct ncclInfo* info) {
 }
 
 static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFuncIndex, struct ncclWorkElem* work, struct ncclProxyOp* proxyOp /* output */) {
+
   // Set nstepsPerLoop and nchunksPerLoop
   NCCLCHECK(getPatternInfo(info));
   NCCLCHECK(getLoopInfo(info));
-
   work->sendbuff = info->sendbuff;
   work->recvbuff = info->recvbuff;
   work->root = info->root;
@@ -1426,10 +1443,26 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
   // because some protocols need to transmit more than the total size, plus they sometimes
   // round up
   proxyOp->nbytes = stepSize*proxyOp->sliceSteps;
-
+  LOG_MOD(NCCL_MOD, "info->pattern %d, info->nstepsPerLoop %d, info->nchunksPerLoop %d, nloops=%d", info->pattern, info->nstepsPerLoop, info->nchunksPerLoop, nLoops);
+  LOG_MOD(NCCL_MOD,
+          "proxyOp->nsteps=%d, proxyOp->sliceSteps=%d, proxyOp->chunkSteps=%d, proxyOp->chunkSize=%d,proxyOp->protocol=%d,proxyOp->nbytes=%lu",
+                              proxyOp->nsteps,
+          proxyOp->sliceSteps, proxyOp->chunkSteps, proxyOp->chunkSize,
+          proxyOp->protocol, proxyOp->nbytes);
   TRACE(NCCL_COLL,"opCount %lx slicesteps %d spl %d cpl %d nbytes %zi -> protocol %d nchannels %d nthreads %d, nloops %d nsteps %d chunksize %d comm %p",
       proxyOp->opCount, sliceSteps, info->nstepsPerLoop, info->nchunksPerLoop, info->nBytes, info->protocol, info->nChannels, info->nThreads,
       nLoops, proxyOp->nsteps, chunkSize, info->comm);
+  if (info->protocol == NCCL_PROTO_LL) {
+    LOG_MOD(NCCL_MOD, "Using Protocol LL");
+  } else if (info->protocol == NCCL_PROTO_SIMPLE) {
+    LOG_MOD(NCCL_MOD, "Using Protocol SIMPLE");
+  } else {
+    LOG_MOD(NCCL_MOD, "Using Protocol Unkonwn!");
+  }
+  //! for now, initialize cooridnator here
+  //! must init topology first!
+  modTopologyInit(&global_topology, proxyOp, info);
+  modCoordinatorInit(&global_coordinator, proxyOp, info);
   return ncclSuccess;
 }
 
@@ -1562,6 +1595,7 @@ static ncclResult_t taskAppend(struct ncclComm* comm, struct ncclInfo const* inf
     NCCLCHECK(hostToDevRedOp(&opFull, info->op, info->datatype, comm));
 
     if (comm->nRanks == 1) {
+      LOG_MOD(NCCL_MOD, "ncclLaunchOneRank called");
       NCCLCHECK(ncclLaunchOneRank(info->recvbuff, info->sendbuff, info->count, opFull, info->datatype, info->stream));
       return ncclSuccess;
     } else {
@@ -1614,7 +1648,7 @@ ncclResult_t ncclEnqueueCheck(struct ncclInfo* info) {
   NCCLCHECK(ncclGroupStartInternal());
   ncclResult_t ret = ncclSuccess;
   int devOld = -1;
-
+  printf("NCCL Enqueued: %s\n", info->opName);
   NCCLCHECKGOTO(PtrCheck(info->comm, info->opName, "comm"), ret, fail);
   // Check whether communicator is ready to communicate
   NCCLCHECKGOTO(ncclCommEnsureReady(info->comm), ret, fail);
