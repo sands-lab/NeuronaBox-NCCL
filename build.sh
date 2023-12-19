@@ -1,5 +1,7 @@
-#!/bin/bash -i
-set -ex
+#!/usr/bin/bash -i
+set -e
+eval "$(conda shell.bash hook)"
+set -x
 conda activate ~/env/nccl_mod
 export CUDA_HOME=$CONDA_PREFIX
 
