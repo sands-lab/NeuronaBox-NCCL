@@ -6,11 +6,13 @@
 
 #include "enqueue.h"
 #include "argcheck.h"
-#include "coll_net.h"
-#include "gdrwrap.h"
 #include "bootstrap.h"
 #include "channel.h"
+#include "coll_net.h"
 #include "cudawrap.h"
+#include "gdrwrap.h"
+#include "include/debug.h"
+#include "include/nccl_common.h"
 #include "transport.h"
 
 #include <cstring> // std::memcpy
@@ -471,7 +473,7 @@ static ncclResult_t scheduleCollTasksToPlan(
     struct ncclComm* comm, struct ncclKernelPlan* plan, int* nWorkBudget
   ) {
   struct ncclTasks* tasks = &comm->tasks;
-
+  LOG_MOD(NCCL_MOD, "scheduleCollTasksToPlan");
   size_t bytePerChannel[/*collNetSupport*/2];
   if (comm->channelSize > 0) {
     // Set by user
@@ -581,6 +583,7 @@ static ncclResult_t scheduleCollTasksToPlan(
 
       plan->threadPerBlock = std::max(plan->threadPerBlock, info.nThreads);
       if (!plan->kernelSpecialized) {
+        LOG_MOD(NCCL_MOD, "fill kernal with workfnidx = %d", workFuncIndex);
         plan->kernelFn = ncclDevKernelForFunc[workFuncIndex];
         plan->kernelSpecialized = ncclDevKernelForFuncIsSpecialized[workFuncIndex];
       }
@@ -1040,6 +1043,7 @@ NCCL_PARAM(MemSyncDomain, "MEM_SYNC_DOMAIN", cudaLaunchMemSyncDomainRemote);
 #endif
 
 ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan) {
+  LOG_MOD(NCCL_MOD, "nccl lanunch kernel");
   struct ncclTasks* tasks = &comm->tasks;
   void *fn = plan->kernelFn;
   cudaStream_t launchStream = tasks->streams->stream;
@@ -1095,7 +1099,6 @@ ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan
   }
   #endif
   // Standard kernel launch
-  NCCL_LOG_INFO(NCCL_MOD, "before cuda launch kernel");
   CUDACHECK(cudaLaunchKernel(fn, grid, block, args, smem, launchStream));
   return ncclSuccess;
 }
@@ -1560,9 +1563,11 @@ static ncclResult_t taskAppend(struct ncclComm* comm, struct ncclInfo const* inf
     // Copy reduction op state from op handle into info struct here since the
     // op handle may be destroyed before ncclGroupEnd().
     struct ncclDevRedOpFull opFull;
+    LOG_MOD(NCCL_MOD, "before h2d reduce op in task append");
     NCCLCHECK(hostToDevRedOp(&opFull, info->op, info->datatype, comm));
 
     if (comm->nRanks == 1) {
+      LOG_MOD(NCCL_MOD, "ncclLaunchOneRank called");
       NCCLCHECK(ncclLaunchOneRank(info->recvbuff, info->sendbuff, info->count, opFull, info->datatype, info->stream));
       return ncclSuccess;
     } else {
@@ -1584,6 +1589,7 @@ static ncclResult_t taskAppend(struct ncclComm* comm, struct ncclInfo const* inf
     }
   }
 
+  LOG_MOD(NCCL_MOD, "before cuda streams");
   if (info->stream != tasks->streamRecent || tasks->streams == nullptr) {
     tasks->streamRecent = info->stream;
     struct ncclCudaStreamList* l = tasks->streams;
@@ -1631,11 +1637,13 @@ ncclResult_t ncclEnqueueCheck(struct ncclInfo* info) {
         info->datatype, info->op, info->root, info->comm, info->comm->nRanks, info->stream);
   TRACE_CALL("nccl%s(%" PRIx64 ",%" PRIx64 ",%zi,%d,%d,%d,%p,%p)", info->opName, reinterpret_cast<int64_t>(info->sendbuff), reinterpret_cast<int64_t>(info->recvbuff), info->count, info->datatype, info->op, info->root, info->comm, info->stream);
 
+  LOG_MOD(NCCL_MOD, "before task append");
   NCCLCHECKGOTO(taskAppend(info->comm, info), ret, fail);
 
 exit:
   if (devOld != -1) CUDACHECK(cudaSetDevice(devOld));
   ncclGroupErrCheck(ret);
+  LOG_MOD(NCCL_MOD, "before group end internal in enqueue check");
   NCCLCHECK(ncclGroupEndInternal());
   /* if depth is 1, ncclGroupEndInternal() will trigger group ops. The state can change
    * so we have to check state here. */

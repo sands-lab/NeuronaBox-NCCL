@@ -45,35 +45,47 @@ namespace {
   }
 }
 
-ncclResult_t ncclLaunchOneRank(void* dst, void const* src, size_t nElts, struct ncclDevRedOpFull redOp, ncclDataType_t eltType, cudaStream_t stream) {
-  size_t eltSize = ncclTypeSize(eltType);
-  if (redOp.op != ncclDevPreMulSum) {
-    if (dst != src) {
-      NCCLCHECK(ncclCudaMemcpyAsync((char*)dst, (char*)src, nElts*eltSize, stream));
-    }
-    return ncclSuccess;
-  }
-
-  void const* kernel;
-  switch (eltType) {
-  case ncclInt8:     kernel = (void const*)&oneRankReduce<FuncPreMulSum<int8_t>>; break;
-  case ncclUint8:    kernel = (void const*)&oneRankReduce<FuncPreMulSum<uint8_t>>; break;
-  case ncclInt32:    kernel = (void const*)&oneRankReduce<FuncPreMulSum<int32_t>>; break;
-  case ncclUint32:   kernel = (void const*)&oneRankReduce<FuncPreMulSum<uint32_t>>; break;
-  case ncclInt64:    kernel = (void const*)&oneRankReduce<FuncPreMulSum<int64_t>>; break;
-  case ncclUint64:   kernel = (void const*)&oneRankReduce<FuncPreMulSum<uint64_t>>; break;
-  case ncclFloat16:  kernel = (void const*)&oneRankReduce<FuncPreMulSum<half>>; break;
-  #if defined(__CUDA_BF16_TYPES_EXIST__)
-  case ncclBfloat16: kernel = (void const*)&oneRankReduce<FuncPreMulSum<__nv_bfloat16>>; break;
-  #endif
-  case ncclFloat32:  kernel = (void const*)&oneRankReduce<FuncPreMulSum<float>>; break;
-  case ncclFloat64:  kernel = (void const*)&oneRankReduce<FuncPreMulSum<double>>; break;
-  default: return ncclInvalidArgument;
-  }
-  dim3 grid = {0, 1, 1};
-  grid.x = std::min(32, (int)divUp(nElts*eltSize, 16<<10));
-  dim3 block = {512, 1, 1};
-  void* args[5] = {&dst, &src, &nElts, &redOp.scalarArg, &redOp.scalarArgIsPtr};
-  CUDACHECK(cudaLaunchKernel(kernel, grid, block, args, 0, stream));
+//! MOD
+ncclResult_t ncclLaunchOneRank(void *dst, void const *src, size_t nElts,
+                               struct ncclDevRedOpFull redOp,
+                               ncclDataType_t eltType, cudaStream_t stream) {
+  // do nothing hahaha
   return ncclSuccess;
 }
+// ncclResult_t ncclLaunchOneRank(void* dst, void const* src, size_t nElts,
+// struct ncclDevRedOpFull redOp, ncclDataType_t eltType, cudaStream_t stream) {
+//   size_t eltSize = ncclTypeSize(eltType);
+//   if (redOp.op != ncclDevPreMulSum) {
+//     if (dst != src) {
+//       NCCLCHECK(ncclCudaMemcpyAsync((char*)dst, (char*)src, nElts*eltSize,
+//       stream));
+//     }
+//     return ncclSuccess;
+//   }
+
+//   void const* kernel;
+//   switch (eltType) {
+//   case ncclInt8:     kernel = (void
+//   const*)&oneRankReduce<FuncPreMulSum<int8_t>>; break; case ncclUint8: kernel
+//   = (void const*)&oneRankReduce<FuncPreMulSum<uint8_t>>; break; case
+//   ncclInt32:    kernel = (void const*)&oneRankReduce<FuncPreMulSum<int32_t>>;
+//   break; case ncclUint32:   kernel = (void
+//   const*)&oneRankReduce<FuncPreMulSum<uint32_t>>; break; case ncclInt64:
+//   kernel = (void const*)&oneRankReduce<FuncPreMulSum<int64_t>>; break; case
+//   ncclUint64:   kernel = (void
+//   const*)&oneRankReduce<FuncPreMulSum<uint64_t>>; break; case ncclFloat16:
+//   kernel = (void const*)&oneRankReduce<FuncPreMulSum<half>>; break; #if
+//   defined(__CUDA_BF16_TYPES_EXIST__) case ncclBfloat16: kernel = (void
+//   const*)&oneRankReduce<FuncPreMulSum<__nv_bfloat16>>; break; #endif case
+//   ncclFloat32:  kernel = (void const*)&oneRankReduce<FuncPreMulSum<float>>;
+//   break; case ncclFloat64:  kernel = (void
+//   const*)&oneRankReduce<FuncPreMulSum<double>>; break; default: return
+//   ncclInvalidArgument;
+//   }
+//   dim3 grid = {0, 1, 1};
+//   grid.x = std::min(32, (int)divUp(nElts*eltSize, 16<<10));
+//   dim3 block = {512, 1, 1};
+//   void* args[5] = {&dst, &src, &nElts, &redOp.scalarArg,
+//   &redOp.scalarArgIsPtr}; CUDACHECK(cudaLaunchKernel(kernel, grid, block,
+//   args, 0, stream)); return ncclSuccess;
+// }
