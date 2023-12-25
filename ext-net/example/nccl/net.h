@@ -19,7 +19,15 @@
 // Maximum number of requests per comm object
 #define NCCL_NET_MAX_REQUESTS 8
 
-typedef enum {NCCL_LOG_NONE=0, NCCL_LOG_VERSION=1, NCCL_LOG_WARN=2, NCCL_LOG_INFO=3, NCCL_LOG_ABORT=4, NCCL_LOG_TRACE=5} ncclDebugLogLevel;
+typedef enum {
+  NCCL_LOG_NONE = 0,
+  NCCL_LOG_VERSION = 1,
+  NCCL_LOG_WARN = 2,
+  NCCL_LOG_INFO = 3,
+  NCCL_LOG_ABORT = 4,
+  NCCL_LOG_TRACE = 5,
+  NCCL_LOG_MOD = 6
+} ncclDebugLogLevel;
 typedef enum {
   NCCL_INIT = 1,
   NCCL_COLL = 2,
