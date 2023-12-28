@@ -80,10 +80,12 @@ ncclResult_t ncclLaunchOneRank(void *dst, void const *src, size_t nElts,
   case ncclFloat16:
     kernel = (void const *)&oneRankReduce<FuncPreMulSum<half>>;
     break;
-#if defined(__CUDA_BF16_TYPES_EXIST__) case ncclBfloat16:
+#if defined(__CUDA_BF16_TYPES_EXIST__)
+  case ncclBfloat16:
     kernel = (void const *)&oneRankReduce<FuncPreMulSum<__nv_bfloat16>>;
     break;
-#endif case ncclFloat32:
+#endif
+  case ncclFloat32:
     kernel = (void const *)&oneRankReduce<FuncPreMulSum<float>>;
     break;
   case ncclFloat64:

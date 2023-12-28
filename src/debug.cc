@@ -178,7 +178,8 @@ void ncclDebugLog(ncclDebugLogLevel level, unsigned long flags, const char *file
                    hostname, pid, tid, cudaDev, filefunc, line);
     if (ncclParamWarnSetDebugInfo()) ncclDebugLevel = NCCL_LOG_INFO;
   } else if (level == NCCL_LOG_INFO) {
-    len = snprintf(buffer, sizeof(buffer), "%s:%d:%d [%d] NCCL INFO ", hostname, pid, tid, cudaDev);
+    len = snprintf(buffer, sizeof(buffer), "%s:%d:%d [%d] %s:%d NCCL INFO ",
+                   hostname, pid, tid, cudaDev, filefunc, line);
   } else if (level == NCCL_LOG_TRACE && flags == NCCL_CALL) {
     len = snprintf(buffer, sizeof(buffer), "%s:%d:%d NCCL CALL ", hostname, pid, tid);
   } else if (level == NCCL_LOG_TRACE) {
