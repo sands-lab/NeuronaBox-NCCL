@@ -1434,6 +1434,13 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
   TRACE(NCCL_COLL,"opCount %lx slicesteps %d spl %d cpl %d nbytes %zi -> protocol %d nchannels %d nthreads %d, nloops %d nsteps %d chunksize %d comm %p",
       proxyOp->opCount, sliceSteps, info->nstepsPerLoop, info->nchunksPerLoop, info->nBytes, info->protocol, info->nChannels, info->nThreads,
       nLoops, proxyOp->nsteps, chunkSize, info->comm);
+  if (info->protocol == NCCL_PROTO_LL) {
+    LOG_MOD(NCCL_MOD, "Using Protocol LL");
+  } else if (info->protocol == NCCL_PROTO_SIMPLE) {
+    LOG_MOD(NCCL_MOD, "Using Protocol SIMPLE");
+  } else {
+    LOG_MOD(NCCL_MOD, "Using Protocol Unkonwn!");
+  }
   return ncclSuccess;
 }
 

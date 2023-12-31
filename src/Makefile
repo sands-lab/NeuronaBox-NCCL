@@ -42,7 +42,7 @@ PKGTARGET  := $(PKGCONFIGFILE)
 LIBOBJ     := $(LIBSRCFILES:%.cc=$(OBJDIR)/%.o)
 DEPFILES   := $(LIBOBJ:%.o=%.d)
 LDFLAGS    += -L${CUDA_LIB} -l$(CUDARTLIB) -lpthread -lrt -ldl
-
+CXXFLAGS += -Wno-deprecated-gpu-targets
 DEVMANIFEST := $(BUILDDIR)/obj/device/manifest
 
 ##### rules
