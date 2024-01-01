@@ -56,9 +56,7 @@ namespace {
       ssize_t offset;
       int nelem;
       int chunk;
-      if (tid == 0) {
-        printf("inside all reduce run_ring! tid=%d\n", tid);
-      }
+
       // step 0: push data to next GPU
       chunk = modRanks(ringIx + nranks-1);
       offset = calcOffset(chunk);

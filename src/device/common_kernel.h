@@ -91,52 +91,56 @@ __device__ __forceinline__ void reduceCopyPacks(
       }
     }
 
-    #pragma unroll (MinSrcs-1 + !(MinSrcs-1))
-    for (int s=1; s < MinSrcs; s++) {
-      BytePack<BytePerPack> tmp[Unroll];
-      RedFn preFn(s < PreOpSrcs ? preOpArgs[s] : 0);
-      #pragma unroll Unroll
-      for (int u=0; u < Unroll; u++) {
-        if (s < MultimemSrcs) {
-          // applyLoadMultimem uses relaxed semantics for same reason we use volatile below.
-          acc[u] = applyLoadMultimem<RedFn, BytePerPack>(redFn, minSrcs[s]);
-        } else {
-          // Use volatile loads in case credits are polled for with volatile (instead of acquire).
-          tmp[u] = ld_volatile_global<BytePerPack>(minSrcs[s]);
-        }
-        minSrcs[s] += WARP_SIZE*BytePerPack;
-      }
-      #pragma unroll Unroll
-      for (int u=0; u < Unroll; u++) {
-        if (s < PreOpSrcs) tmp[u] = applyPreOp(preFn, tmp[u]);
-        acc[u] = applyReduce(redFn, acc[u], tmp[u]);
-      }
-    }
+    // ! mod, commented all computation, including pre, reduce and post op
+    // #pragma unroll (MinSrcs-1 + !(MinSrcs-1))
+    // for (int s=1; s < MinSrcs; s++) {
+    //   BytePack<BytePerPack> tmp[Unroll];
+    //   RedFn preFn(s < PreOpSrcs ? preOpArgs[s] : 0);
+    //   #pragma unroll Unroll
+    //   for (int u=0; u < Unroll; u++) {
+    //     if (s < MultimemSrcs) {
+    //       // applyLoadMultimem uses relaxed semantics for same reason we use
+    //       volatile below. acc[u] = applyLoadMultimem<RedFn,
+    //       BytePerPack>(redFn, minSrcs[s]);
+    //     } else {
+    //       // Use volatile loads in case credits are polled for with volatile
+    //       (instead of acquire). tmp[u] =
+    //       ld_volatile_global<BytePerPack>(minSrcs[s]);
+    //     }
+    //     minSrcs[s] += WARP_SIZE*BytePerPack;
+    //   }
+    //   #pragma unroll Unroll
+    //   for (int u=0; u < Unroll; u++) {
+    //     if (s < PreOpSrcs) tmp[u] = applyPreOp(preFn, tmp[u]);
+    //     acc[u] = applyReduce(redFn, acc[u], tmp[u]);
+    //   }
+    // }
 
-    for (int s=MinSrcs; (MinSrcs < MaxSrcs) && (s < MaxSrcs) && (s < nSrcs); s++) {
-      uintptr_t src = cvta_to_global(srcPtrs[s]) + threadBytesBehind;
-      BytePack<BytePerPack> tmp[Unroll];
-      RedFn preFn(s < PreOpSrcs ? preOpArgs[s] : 0);
-      #pragma unroll Unroll
-      for (int u=0; u < Unroll; u++) {
-        // Use volatile loads in case credits are polled for with volatile (instead of acquire).
-        tmp[u] = ld_volatile_global<BytePerPack>(src);
-        src += WARP_SIZE*BytePerPack;
-      }
-      #pragma unroll Unroll
-      for (int u=0; u < Unroll; u++) {
-        if (s < PreOpSrcs) tmp[u] = applyPreOp(preFn, tmp[u]);
-        acc[u] = applyReduce(redFn, acc[u], tmp[u]);
-      }
-    }
+    // for (int s=MinSrcs; (MinSrcs < MaxSrcs) && (s < MaxSrcs) && (s < nSrcs);
+    // s++) {
+    //   uintptr_t src = cvta_to_global(srcPtrs[s]) + threadBytesBehind;
+    //   BytePack<BytePerPack> tmp[Unroll];
+    //   RedFn preFn(s < PreOpSrcs ? preOpArgs[s] : 0);
+    //   #pragma unroll Unroll
+    //   for (int u=0; u < Unroll; u++) {
+    //     // Use volatile loads in case credits are polled for with volatile
+    //     (instead of acquire). tmp[u] = ld_volatile_global<BytePerPack>(src);
+    //     src += WARP_SIZE*BytePerPack;
+    //   }
+    //   #pragma unroll Unroll
+    //   for (int u=0; u < Unroll; u++) {
+    //     if (s < PreOpSrcs) tmp[u] = applyPreOp(preFn, tmp[u]);
+    //     acc[u] = applyReduce(redFn, acc[u], tmp[u]);
+    //   }
+    // }
 
-    if (postOp) {
-      #pragma unroll Unroll
-      for (int u=0; u < Unroll; u++)
-        acc[u] = applyPostOp(redFn, acc[u]);
-    }
+    // if (postOp) {
+    //   #pragma unroll Unroll
+    //   for (int u=0; u < Unroll; u++)
+    //     acc[u] = applyPostOp(redFn, acc[u]);
+    // }
 
-    #pragma unroll (MinDsts + !MinDsts)
+#pragma unroll(MinDsts + !MinDsts)
     for (int d=0; d < MinDsts; d++) {
       #pragma unroll Unroll
       for (int u=0; u < Unroll; u++) {
