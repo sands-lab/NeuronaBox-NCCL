@@ -484,7 +484,9 @@ class Primitives<
     constexpr int ThreadPerSync = 8;
     static_assert(MaxSend <= ThreadPerSync && MaxRecv <= ThreadPerSync, "Not enough threads to cover all peers");
 
+    // my group number
     int g = tid / ThreadPerSync;
+    // total number of group
     int ng = nthreads / ThreadPerSync;
     index = tid % ThreadPerSync;
     flags = 0;
@@ -498,6 +500,10 @@ class Primitives<
       if (index < nrecv) flags |= RolePostRecv;
     } else if (g == ng - 1) {
       if (index < nsend) flags |= RolePostSend;
+    }
+    if (tid == 0) {
+      printf("nthread %d, threadpersync %d, nrecv %d, nsend %d\n", nthreads,
+             ThreadPerSync, nrecv, nsend);
     }
 
     int peer = 0;
