@@ -1408,8 +1408,11 @@ static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
                 comm, comm->nRanks, (unsigned long long)hashUniqueId(job->commId), comm->rank, comm->cudaDev);
   }
 
-
-  INFO(NCCL_INIT,"comm %p rank %d nranks %d cudaDev %d nvmlDev %d busId %lx commId 0x%llx - Init COMPLETE", comm, comm->rank, comm->nRanks, comm->cudaDev, comm->nvmlDev, comm->busId, (unsigned long long)hashUniqueId(job->commId));
+  INFO(NCCL_INIT,
+       "comm %p rank %d nranks %d cudaDev %d nvmlDev %d busId %lx commId "
+       "0x%llx - Init COMPLETE, From Modified",
+       comm, comm->rank, comm->nRanks, comm->cudaDev, comm->nvmlDev,
+       comm->busId, (unsigned long long)hashUniqueId(job->commId));
 exit:
   if (job->newcomm) {
     /* assign it to user pointer. */

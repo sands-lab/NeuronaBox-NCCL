@@ -501,10 +501,10 @@ class Primitives<
     } else if (g == ng - 1) {
       if (index < nsend) flags |= RolePostSend;
     }
-    if (tid == 0) {
-      printf("nthread %d, threadpersync %d, nrecv %d, nsend %d\n", nthreads,
-             ThreadPerSync, nrecv, nsend);
-    }
+    // if (tid == 0) {
+    //   printf("nthread %d, threadpersync %d, nrecv %d, nsend %d\n", nthreads,
+    //          ThreadPerSync, nrecv, nsend);
+    // }
 
     int peer = 0;
     if (flags & (RoleWaitRecv|RolePostRecv)) peer = recvPeers[index];
