@@ -171,6 +171,8 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct 
 /* Determine if we will use this transport for this peer and return connect
  * information for this peer */
 static ncclResult_t sendSetup(struct ncclComm* comm, struct ncclTopoGraph* graph, struct ncclPeerInfo* myInfo, struct ncclPeerInfo* peerInfo, struct ncclConnect* connectInfo, struct ncclConnector* send, int channelId, int connIndex) {
+  LOG_MOD(NCCL_MOD, "sendSetup");
+
   struct setupReq req = { 0 };
   int tpProxyRank;
 
@@ -208,6 +210,8 @@ NCCL_PARAM(GdrCopyFlushEnable, "GDRCOPY_FLUSH_ENABLE", 0);
 
 /* Setup recv connector */
 static ncclResult_t recvSetup(struct ncclComm* comm, struct ncclTopoGraph* graph, struct ncclPeerInfo* myInfo, struct ncclPeerInfo* peerInfo, struct ncclConnect* connectInfo, struct ncclConnector* recv, int channelId, int connIndex) {
+  LOG_MOD(NCCL_MOD, "recvSetup");
+
   struct setupReq req = { 0 };
 
   recv->conn.shared = req.shared = graph ? 0 : ncclParamNetSharedBuffers() != -2 ? ncclParamNetSharedBuffers() : 1;
@@ -282,6 +286,8 @@ struct netRecvConnectArgs {
 };
 
 static ncclResult_t sendConnect(struct ncclComm* comm, struct ncclConnect* connectInfo, int nranks, int rank, struct ncclConnector* send) {
+  LOG_MOD(NCCL_MOD, "sendConnect");
+
   struct connectMap* map = (connectMap*) send->transportResources;
 
   void* opId;
@@ -379,6 +385,8 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
 
 /* Connect to this peer */
 static ncclResult_t recvConnect(struct ncclComm* comm, struct ncclConnect* connectInfo, int nranks, int rank, struct ncclConnector* recv) {
+  LOG_MOD(NCCL_MOD, "recvConnect");
+
   struct connectMap* map = (connectMap*) recv->transportResources;
   void* opId;
   if (!map) {
@@ -437,6 +445,8 @@ static ncclResult_t recvConnect(struct ncclComm* comm, struct ncclConnect* conne
 }
 
 static ncclResult_t sendFree(struct ncclConnector* send) {
+  LOG_MOD(NCCL_MOD, "sendFree");
+
   struct connectMap* map = (struct connectMap*)(send->transportResources);
   if (map) {
     int cudaDev;
@@ -466,6 +476,7 @@ static ncclResult_t sendFree(struct ncclConnector* send) {
 }
 
 static ncclResult_t recvFree(struct ncclConnector* recv) {
+  LOG_MOD(NCCL_MOD, "recvFree");
   if (recv->transportResources) free(recv->transportResources);
   return ncclSuccess;
 }
@@ -547,11 +558,15 @@ static ncclResult_t sharedNetBuffersDestroy(struct ncclProxyState* proxyState, i
 }
 
 static ncclResult_t proxySharedInit(struct ncclProxyConnection* connection, struct ncclProxyState* proxyState, int nChannels) {
+  LOG_MOD(NCCL_MOD, "proxySharedInit");
+
   NCCLCHECK(sharedNetBuffersInit(proxyState, 1, connection->tpLocalRank, 0, connection->sameProcess, nChannels, NULL, NULL, NULL, NULL));
   return ncclSuccess;
 }
 
 static ncclResult_t sendProxySetup(struct ncclProxyConnection* connection, struct ncclProxyState* proxyState, void* reqBuff, int reqSize, void* respBuff, int respSize, int* done) {
+
+  LOG_MOD(NCCL_MOD, "sendProxySetup");
   struct setupReq* req = (struct setupReq*) reqBuff;
   if (reqSize != sizeof(struct setupReq)) return ncclInternalError;
 
@@ -585,6 +600,8 @@ static ncclResult_t sendProxySetup(struct ncclProxyConnection* connection, struc
 }
 
 static ncclResult_t recvProxySetup(struct ncclProxyConnection* connection, struct ncclProxyState* proxyState, void* reqBuff, int reqSize, void* respBuff, int respSize, int* done) {
+  LOG_MOD(NCCL_MOD, "recvProxySetup");
+
   struct setupReq* req = (struct setupReq*) reqBuff;
   if (reqSize != sizeof(struct setupReq)) return ncclInternalError;
 
@@ -639,6 +656,8 @@ static ncclResult_t ncclNetGetDeviceHandle(ncclNetDeviceType type, int version, 
 }
 
 static ncclResult_t sendProxyConnect(struct ncclProxyConnection* connection, struct ncclProxyState* proxyState, void* reqBuff, int reqSize, void* respBuff, int respSize, int* done) {
+  LOG_MOD(NCCL_MOD, "recvProxyConnect");
+
   struct sendNetResources* resources = (struct sendNetResources*)(connection->transportResources);
   if (reqSize != sizeof(netSendConnectArgs)) return ncclInternalError;
   ncclResult_t ret = ncclSuccess;
@@ -785,6 +804,8 @@ static ncclResult_t sendProxyConnect(struct ncclProxyConnection* connection, str
 }
 
 static ncclResult_t recvProxyConnect(struct ncclProxyConnection* connection, struct ncclProxyState* proxyState, void* reqBuff, int reqSize, void* respBuff, int respSize, int* done) {
+  LOG_MOD(NCCL_MOD, "recvProxyConnect");
+
   if (reqSize != sizeof(netRecvConnectArgs)) return ncclInternalError;
   struct recvNetResources* resources = (struct recvNetResources*)(connection->transportResources);
   netRecvConnectArgs* req = (netRecvConnectArgs*) reqBuff;
@@ -928,6 +949,8 @@ static ncclResult_t recvProxyConnect(struct ncclProxyConnection* connection, str
 }
 
 static ncclResult_t sendProxyFree(struct ncclProxyConnection* connection, struct ncclProxyState* proxyState) {
+  LOG_MOD(NCCL_MOD, "sendProxyFree");
+
   struct sendNetResources* resources = (struct sendNetResources*)(connection->transportResources);
   if (connection->state == connSharedInitialized) { // NVB Preconnect
     NCCLCHECK(sharedNetBuffersDestroy(proxyState, connection->tpLocalRank, 0, connection));
@@ -973,6 +996,7 @@ static ncclResult_t sendProxyFree(struct ncclProxyConnection* connection, struct
 }
 
 static ncclResult_t recvProxyFree(struct ncclProxyConnection* connection, struct ncclProxyState* proxyState) {
+  LOG_MOD(NCCL_MOD, "recvProxyFree");
   struct recvNetResources* resources = (struct recvNetResources*)(connection->transportResources);
   if (connection->state == connSharedInitialized) { // NVB Preconnect
     NCCLCHECK(sharedNetBuffersDestroy(proxyState, connection->tpLocalRank, 1, connection));
