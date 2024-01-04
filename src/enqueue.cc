@@ -583,7 +583,7 @@ static ncclResult_t scheduleCollTasksToPlan(
 
       plan->threadPerBlock = std::max(plan->threadPerBlock, info.nThreads);
       if (!plan->kernelSpecialized) {
-        LOG_MOD(NCCL_MOD, "fill kernal with workfnidx = %d", workFuncIndex);
+        LOG_MOD(NCCL_MOD, "fill kernal with workfuncindex = %d", workFuncIndex);
         plan->kernelFn = ncclDevKernelForFunc[workFuncIndex];
         plan->kernelSpecialized = ncclDevKernelForFuncIsSpecialized[workFuncIndex];
       }
@@ -1570,7 +1570,6 @@ static ncclResult_t taskAppend(struct ncclComm* comm, struct ncclInfo const* inf
     // Copy reduction op state from op handle into info struct here since the
     // op handle may be destroyed before ncclGroupEnd().
     struct ncclDevRedOpFull opFull;
-    LOG_MOD(NCCL_MOD, "before h2d reduce op in task append");
     NCCLCHECK(hostToDevRedOp(&opFull, info->op, info->datatype, comm));
 
     if (comm->nRanks == 1) {
@@ -1596,7 +1595,6 @@ static ncclResult_t taskAppend(struct ncclComm* comm, struct ncclInfo const* inf
     }
   }
 
-  LOG_MOD(NCCL_MOD, "before cuda streams");
   if (info->stream != tasks->streamRecent || tasks->streams == nullptr) {
     tasks->streamRecent = info->stream;
     struct ncclCudaStreamList* l = tasks->streams;
@@ -1644,13 +1642,11 @@ ncclResult_t ncclEnqueueCheck(struct ncclInfo* info) {
         info->datatype, info->op, info->root, info->comm, info->comm->nRanks, info->stream);
   TRACE_CALL("nccl%s(%" PRIx64 ",%" PRIx64 ",%zi,%d,%d,%d,%p,%p)", info->opName, reinterpret_cast<int64_t>(info->sendbuff), reinterpret_cast<int64_t>(info->recvbuff), info->count, info->datatype, info->op, info->root, info->comm, info->stream);
 
-  LOG_MOD(NCCL_MOD, "before task append");
   NCCLCHECKGOTO(taskAppend(info->comm, info), ret, fail);
 
 exit:
   if (devOld != -1) CUDACHECK(cudaSetDevice(devOld));
   ncclGroupErrCheck(ret);
-  LOG_MOD(NCCL_MOD, "before group end internal in enqueue check");
   NCCLCHECK(ncclGroupEndInternal());
   /* if depth is 1, ncclGroupEndInternal() will trigger group ops. The state can change
    * so we have to check state here. */

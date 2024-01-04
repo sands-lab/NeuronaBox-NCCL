@@ -215,7 +215,7 @@ static ncclResult_t allocateArgs(struct ncclProxyProgressState* state, struct nc
   return ncclSuccess;
 }
 
-//#define DEBUG_PROXY 1
+#define DEBUG_PROXY 1
 #ifdef DEBUG_PROXY
 #define DEBUG_PROXY_PRINT printf
 #else
@@ -591,6 +591,7 @@ ncclResult_t ncclProxySaveOp(struct ncclComm* comm, struct ncclProxyOp* op, bool
 NCCL_PARAM(ChunkSize, "CHUNK_SIZE", 0);
 
 ncclResult_t ncclProxyComputeP2p(struct ncclInfo* info, struct ncclProxyOp* op) {
+  LOG_MOD(NCCL_MOD, "nccl proxy compute p2p");
   memset(op, 0, sizeof(struct ncclProxyOp));
   int channelId = info->channelId;
   struct ncclChannel* channel = info->comm->channels+channelId;
@@ -681,7 +682,9 @@ static ncclResult_t progressOps(struct ncclProxyState* proxyState, struct ncclPr
   while (op) {
     if (op->state == ncclProxyOpNone) return ncclInternalError;
     TIME_START(0); TIME_START(1);
+    LOG_MOD(NCCL_MOD, "before op->progress\n");
     NCCLCHECK(op->progress(proxyState, op));
+    LOG_MOD(NCCL_MOD, "after op->progress\n");
     if (op->idle) { TIME_STOP(1); TIME_CANCEL(0); } else { TIME_CANCEL(1); TIME_STOP(0); }
     *idle &= op->idle;
     if (op->state == ncclProxyOpNone) {
@@ -905,6 +908,7 @@ ncclResult_t ncclProxyStart(struct ncclComm* comm) {
 static ncclResult_t ncclProxyProgressCreate(struct ncclProxyState* proxyState) {
   struct ncclProxyProgressState* state = &proxyState->progressState;
   if (!state->thread) {
+    LOG_MOD(NCCL_MOD, "ncclProxyProgressCreate pthread_create");
     pthread_create(&state->thread, NULL, ncclProxyProgress, proxyState);
     ncclSetThreadName(state->thread, "NCCL Progress%2d", proxyState->tpLocalnRanks);
   }
@@ -1580,6 +1584,7 @@ ncclResult_t ncclProxyInit(struct ncclComm* comm, struct ncclSocket* sock, union
 }
 
 ncclResult_t ncclProxyCreate(struct ncclComm* comm) {
+  LOG_MOD(NCCL_MOD, "nccl (main) proxy create");
   /* proxyState is shared among parent comm and split comms. comm->proxyState->thread is
    * pthread_join()'d by commFree() in init.cc when the refCount reduces down to 0. */
   struct ncclProxyState* proxyState = comm->proxyState;

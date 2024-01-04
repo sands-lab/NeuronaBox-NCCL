@@ -1017,6 +1017,7 @@ static_assert(NCCL_STEPS <= NCCL_NET_MAX_REQUESTS, "Not enough net requests to c
 
 static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct ncclProxyArgs* args) {
   if (args->state == ncclProxyOpReady) {
+    LOG_MOD(NCCL_MOD, "send proxy progress op ready\n");
     for (int s=0; s<args->nsubs; s++) {
       struct ncclProxySubArgs* sub = args->subs+s;
       struct sendNetResources* resources = (struct sendNetResources*) (sub->connection->transportResources);
@@ -1143,6 +1144,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct 
 static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct ncclProxyArgs* args) {
   if (args->state == ncclProxyOpReady) {
     // Initialize subs and group them by same recvComm.
+    LOG_MOD(NCCL_MOD, "recv proxy progress op ready");
     void* recvComm;
     int groupSize = 0;
     int maxRecvs = 1;
