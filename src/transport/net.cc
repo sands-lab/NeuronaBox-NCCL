@@ -1039,16 +1039,19 @@ static ncclResult_t recvProxyFree(struct ncclProxyConnection* connection, struct
 
 static_assert(NCCL_STEPS <= NCCL_NET_MAX_REQUESTS, "Not enough net requests to cover for steps");
 
-static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct ncclProxyArgs* args) {
+static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
+                                      struct ncclProxyArgs *args) {
+  LOG_MOD(NCCL_MOD, "send proxy progress op");
   if (args->state == ncclProxyOpReady) {
-    LOG_MOD(NCCL_MOD, "send proxy progress op ready\n");
-    for (int s=0; s<args->nsubs; s++) {
-      struct ncclProxySubArgs* sub = args->subs+s;
-      struct sendNetResources* resources = (struct sendNetResources*) (sub->connection->transportResources);
+    for (int s = 0; s < args->nsubs; s++) {
+      struct ncclProxySubArgs *sub = args->subs + s;
+      struct sendNetResources *resources =
+          (struct sendNetResources *)(sub->connection->transportResources);
       // Round to next multiple of sliceSteps
       sub->base = ROUNDUP(resources->step, args->chunkSteps);
       sub->posted = sub->transmitted = sub->done = 0;
-      for (uint64_t step=0; step<sub->nsteps; step++) ncclProfilingRecord(args, s, step, ncclProxyProfileBegin);
+      for (uint64_t step = 0; step < sub->nsteps; step++)
+        ncclProfilingRecord(args, s, step, ncclProxyProfileBegin);
     }
     args->state = ncclProxyOpProgress;
   }
@@ -1166,9 +1169,9 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct 
 }
 
 static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct ncclProxyArgs* args) {
+  LOG_MOD(NCCL_MOD, "recv proxy progress op ready");
   if (args->state == ncclProxyOpReady) {
     // Initialize subs and group them by same recvComm.
-    LOG_MOD(NCCL_MOD, "recv proxy progress op ready");
     void* recvComm;
     int groupSize = 0;
     int maxRecvs = 1;
