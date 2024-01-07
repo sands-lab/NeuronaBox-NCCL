@@ -367,9 +367,11 @@ class Primitives<
 
   __device__ __forceinline__ void loadRecvConn(ncclDevChannelPeer *peer, int connIndex, struct ncclWorkElem* e) {
     if (flags & (RoleWaitRecv|RolePostRecv)) {
+      // typf of conn is ncclConnInfo*
       auto *conn = &peer->recv[connIndex];
       if (conn->netDeviceHandle.netDeviceType == NCCL_NET_DEVICE_UNPACK) {
         // handle must be a device ptr
+        printf("NCCL_NET_DEVICE_UNPACK for tid = %d", tid);
         netDeviceHandle = conn->netDeviceHandle.handle;
         // Cache the handle
         ncclNetDeviceUnpackSetup(netDeviceHandle, group, index);

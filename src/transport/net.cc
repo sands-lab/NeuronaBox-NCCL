@@ -286,7 +286,14 @@ struct netRecvConnectArgs {
 };
 
 static ncclResult_t sendConnect(struct ncclComm* comm, struct ncclConnect* connectInfo, int nranks, int rank, struct ncclConnector* send) {
-  LOG_MOD(NCCL_MOD, "sendConnect");
+  // send Connect is always called in main thread of the process, until
+  // [0] recvProxyConnect:807 NCCL MOD recvProxyConnect
+  // [0] ncclPollProxyResponse:1179 NCCL INFO
+  // resp.opId=0x5628dbfb84b0 matches expected opId=0x5628dbfb84b0
+  // [0] sendConnect:314 NCCL INFO sendConnect
+  // ncclPollProxyResponse opId=0x5628dbfb84b0 I guess there is a loop calling
+  // that until we get response
+  // LOG_MOD(NCCL_MOD, "sendConnect");
 
   struct connectMap* map = (connectMap*) send->transportResources;
 
@@ -385,7 +392,18 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
 
 /* Connect to this peer */
 static ncclResult_t recvConnect(struct ncclComm* comm, struct ncclConnect* connectInfo, int nranks, int rank, struct ncclConnector* recv) {
-  LOG_MOD(NCCL_MOD, "recvConnect");
+  // recvConnect is always called, until
+  //  [0] ncclPollProxyResponse:1166 NCCL INFO
+  //   ncclPollProxyResponse Received new opId=0x5628dbfb8650
+  //  [0] ncclPollProxyResponse:1179 NCCL INFO
+  // resp.opId=0x5628dbfb8650 matches expected opId=0x5628dbfb8650
+  // [0] recvConnect:411 NCCL INFO recvConnect
+  // ncclPollProxyResponse opId=0x5628dbfb8650 [0]
+  // 575.994778 ncclSocketConnect:613 NCCL TRACE Connecting to socket
+  // xxx ip
+  // [0] initTransportsRank:1115  NCCL INFO Connected all rings
+  // LOG_MOD(NCCL_MOD, "recvConnect");
+  // this is similar with send connect, I guess
 
   struct connectMap* map = (connectMap*) recv->transportResources;
   void* opId;
@@ -748,13 +766,21 @@ static ncclResult_t sendProxyConnect(struct ncclProxyConnection* connection, str
         NCCLCHECK(ncclCudaCalloc(&map->mems[NCCL_NET_MAP_DEVMEM].gpuPtr, map->mems[NCCL_NET_MAP_DEVMEM].size));
       }
       map->mems[NCCL_NET_MAP_DEVMEM].cpuPtr = map->mems[NCCL_NET_MAP_DEVMEM].gpuPtr;
+      printf("DEVMEM, shared = 0, cpuPtr = gpuPtr = %p\n",
+             map->mems[NCCL_NET_MAP_DEVMEM].cpuPtr);
     }
   }
   if (map->sameProcess) {
     NCCLCHECK(ncclCudaHostCalloc(&map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr, map->mems[NCCL_NET_MAP_HOSTMEM].size));
     map->mems[NCCL_NET_MAP_HOSTMEM].gpuPtr = map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr;
+    printf("HOSTMEM, sameProcess = 1, cpuPtr = gpuPtr = %p\n",
+           map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr);
   } else {
     NCCLCHECK(netCreateShm(map->mems+NCCL_NET_MAP_HOSTMEM));
+    printf("HOSTMEM, sameProcess = 0, called netCreateShm, cpuPtr = %p, gpuPtr "
+           "= %p\n",
+           map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr,
+           map->mems[NCCL_NET_MAP_HOSTMEM].gpuPtr);
   }
   if (ncclGdrCopy && map->sameProcess && ncclParamGdrCopySyncEnable()) {
     uint64_t *cpuPtr, *gpuPtr;
@@ -769,9 +795,10 @@ static ncclResult_t sendProxyConnect(struct ncclProxyConnection* connection, str
 
   resources->sendMem = (struct ncclSendMem*) NCCL_NET_MAP_GET_POINTER(map, cpu, sendMem);
   resources->recvMem = (struct ncclRecvMem*) NCCL_NET_MAP_GET_POINTER(map, cpu, recvMem);
-
-  // Don't give credits yet in shared mode.
-  resources->sendMem->head = map->shared ? -NCCL_STEPS : 0;
+  printf("in sendproxy connect, final result is sendMem = %p, recvMem = %p\n",
+         resources->sendMem, resources->recvMems)
+      // Don't give credits yet in shared mode.
+      resources->sendMem->head = map->shared ? -NCCL_STEPS : 0;
   for (int i=0; i<NCCL_STEPS; i++) resources->recvMem->sizesFifo[i] = -1;
 
   for (int p=0; p<NCCL_NUM_PROTOCOLS; p++) {
@@ -899,10 +926,14 @@ static ncclResult_t recvProxyConnect(struct ncclProxyConnection* connection, str
         NCCLCHECK(ncclCudaCalloc(&map->mems[NCCL_NET_MAP_DEVMEM].gpuPtr, map->mems[NCCL_NET_MAP_DEVMEM].size));
       }
       map->mems[NCCL_NET_MAP_DEVMEM].cpuPtr = map->mems[NCCL_NET_MAP_DEVMEM].gpuPtr;
+      printf("DEVMEM, shared = 0, cpuPtr = gpuPtr = %p\n",
+             map->mems[NCCL_NET_MAP_DEVMEM].cpuPtr);
     }
   }
   NCCLCHECK(ncclCudaHostCalloc(&map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr, map->mems[NCCL_NET_MAP_HOSTMEM].size));
   map->mems[NCCL_NET_MAP_HOSTMEM].gpuPtr = map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr;
+  printf("HOSTMEM, cpuPtr = gpuPtr = %p\n",
+         map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr);
   if (ncclGdrCopy && map->sameProcess) {
     uint64_t *cpuPtr, *gpuPtr;
     NCCLCHECK(ncclGdrCudaCalloc(&cpuPtr, &gpuPtr, 2, &resources->gdrDesc));
@@ -919,7 +950,9 @@ static ncclResult_t recvProxyConnect(struct ncclProxyConnection* connection, str
 
   resources->sendMem = (struct ncclSendMem*) NCCL_NET_MAP_GET_POINTER(map, cpu, sendMem);
   resources->recvMem = (struct ncclRecvMem*) NCCL_NET_MAP_GET_POINTER(map, cpu, recvMem);
-  for (int p=0; p<NCCL_NUM_PROTOCOLS; p++) {
+  printf("in recvproxy connect, final result is sendMem = %p, recvMem = %p\n",
+         resources->sendMem,
+         resources->recvMem) for (int p = 0; p < NCCL_NUM_PROTOCOLS; p++) {
     resources->buffers[p] = NCCL_NET_MAP_GET_POINTER(map, cpu, buffs[p]);
     if (resources->buffers[p]) {
 #if CUDA_VERSION >= 11070
