@@ -200,81 +200,106 @@ class Primitives<
     int offset = 0;
 
     if (tid < nworkers && offset < nelem) {
-      // Worker-only loop for non-empty slices. Non-workers and empty slices are
-      // processed in the loop following this if block. The benefit of splitting
-      // the loop like this is we pull two branches out of the critical path.
-      // Using "number of branch insns (taken or not) encountered dynamically"
-      // as the performance metric, then:
-      //   perf_orig = 2*numslices
-      //   perf_new = 2+numslices
-      // So the new code and old code behave the same for numslices=2, and for
-      // numslices>2 the new code is superior. And note that in the case
-      // numslices=1, the loop is trivially unrollable (single iteration) so we
-      // don't incur that that tail branch and we still have perf_new=2.
-      //
-      // ORIGINAL CODE:
-      //   unrolled for(slices) {
-      //     if(worker) { // This branch removed
-      //       wait();
-      //       subBarrier();
-      //       if(slice not empty) // This branch removed
-      //         ReduceCopyMulti();
-      //     }
-      //     barrier();
-      //     post();
-      //   } // Since we no longer unroll, new branch added here
-      #if __CUDA_ARCH__ < 700
-        // Above doesn't matter on older hardware.
-        #pragma unroll SlicePerChunk
-      #else
-        #pragma unroll 1
-      #endif
+      printf("[tid=%d] DR%d DS%d R%d S%d Src%d Dst%d\n", tid, DirectRecv,
+             DirectSend, Recv, Send, Src, Dst);
+// Worker-only loop for non-empty slices. Non-workers and empty slices are
+// processed in the loop following this if block. The benefit of splitting
+// the loop like this is we pull two branches out of the critical path.
+// Using "number of branch insns (taken or not) encountered dynamically"
+// as the performance metric, then:
+//   perf_orig = 2*numslices
+//   perf_new = 2+numslices
+// So the new code and old code behave the same for numslices=2, and for
+// numslices>2 the new code is superior. And note that in the case
+// numslices=1, the loop is trivially unrollable (single iteration) so we
+// don't incur that that tail branch and we still have perf_new=2.
+//
+// ORIGINAL CODE:
+//   unrolled for(slices) {
+//     if(worker) { // This branch removed
+//       wait();
+//       subBarrier();
+//       if(slice not empty) // This branch removed
+//         ReduceCopyMulti();
+//     }
+//     barrier();
+//     post();
+//   } // Since we no longer unroll, new branch added here
+#if __CUDA_ARCH__ < 700
+// Above doesn't matter on older hardware.
+#pragma unroll SlicePerChunk
+#else
+#pragma unroll 1
+#endif
       do {
-        sliceSize = sliceSize < nelem-offset ? sliceSize : nelem-offset;
-        if (Src && (flags & (SrcBuf==Input ? RoleInput : RoleOutput)))
+        sliceSize = sliceSize < nelem - offset ? sliceSize : nelem - offset;
+        if (Src && (flags & (SrcBuf == Input ? RoleInput : RoleOutput)))
           ncclShmem.groups[group].srcs[0] = userBuff + srcIx + offset;
-        if (Dst && (flags & (DstBuf==Input ? RoleInput : RoleOutput)))
+        if (Dst && (flags & (DstBuf == Input ? RoleInput : RoleOutput)))
           ncclShmem.groups[group].dsts[0] = userBuff + dstIx + offset;
-        waitPeer<DirectRecv, DirectSend, Recv, Send, Src, Dst>(srcIx, dstIx, offset, sliceSize);
+        waitPeer<DirectRecv, DirectSend, Recv, Send, Src, Dst>(
+            srcIx, dstIx, offset, sliceSize);
         subBarrier();
-        /* if user abort the kernel, we don't need to actually perform copy/reduce; just set size
-         * to 0 to avoid unnecessary workload. */
+        /* if user abort the kernel, we don't need to actually perform
+         * copy/reduce; just set size to 0 to avoid unnecessary workload. */
         int workSize = ncclShmem.aborted ? 0 : sliceSize;
         if (flags & AnyNetDeviceUnpack) {
-          ncclNetDeviceUnpack<Recv>(tid, tidInBlock, nworkers, group, ncclShmem.groups[group].devicePlugin.unpack.unpackNetDeviceIndexMask, Src, workSize);
-          // Sync here to make sure all workers are reading from the updated srcs)
+          ncclNetDeviceUnpack<Recv>(
+              tid, tidInBlock, nworkers, group,
+              ncclShmem.groups[group]
+                  .devicePlugin.unpack.unpackNetDeviceIndexMask,
+              Src, workSize);
+          // Sync here to make sure all workers are reading from the updated
+          // srcs)
           subBarrier();
         }
 
-        if (DirectRecv && ncclShmem.groups[group].srcs[0] == ncclShmem.groups[group].dsts[0]
-            /* NVLS can have srcs[0] == dsts[0], but we cannot enter this "if branch",
-             * so we need to check whether MultimemSrcs and MultimemDsts are 0. */
+        if (DirectRecv &&
+            ncclShmem.groups[group].srcs[0] == ncclShmem.groups[group].dsts[0]
+            /* NVLS can have srcs[0] == dsts[0], but we cannot enter this "if
+             * branch", so we need to check whether MultimemSrcs and
+             * MultimemDsts are 0. */
             && MultimemSrcs == 0 && MultimemDsts == 0) {
-          // We can only have one direct receive. Since srcs[0] == dstPtr+offset, skip one copy
+          // We can only have one direct receive. Since srcs[0] ==
+          // dstPtr+offset, skip one copy
           if (Send) {
-            reduceCopy<Unroll, RedOp, T, 0, 1, 1, 0, 1, MaxSend, /*PreOpSrcs*/0>
-              (tid, nworkers, /*redArg*/0, /*preOpArgs*/nullptr, /*postOp*/false,
-               1, ncclShmem.groups[group].srcs,
-               fan.nsend(), ncclShmem.groups[group].dsts+1,
-               workSize);
+            reduceCopy<Unroll, RedOp, T, 0, 1, 1, 0, 1, MaxSend,
+                       /*PreOpSrcs*/ 0>(
+                tid, nworkers, /*redArg*/ 0, /*preOpArgs*/ nullptr,
+                /*postOp*/ false, 1, ncclShmem.groups[group].srcs, fan.nsend(),
+                ncclShmem.groups[group].dsts + 1, workSize);
+            printf("[tid=%d] DirectRecv;Send nsrc=%d src=%p ndst=%d dst=%p\n",
+                   tid, 1, ncclShmem.groups[group].srcs[0], fan.nsend(),
+                   ncclShmem.groups[group].dsts[1]);
           }
-        } else if (DirectSend && !DirectRecv && SrcBuf != Input && ncclShmem.groups[group].dsts[Dst] == nullptr) {
+        } else if (DirectSend && !DirectRecv && SrcBuf != Input &&
+                   ncclShmem.groups[group].dsts[Dst] == nullptr) {
           // For broadcast in CollNet to do empty send
-          reduceCopy<Unroll, RedOp, T, 0, 1, 1, 0, 1, 1, /*PreOpSrcs*/0>
-            (tid, nworkers, ncclShmem.redOpArgs[0],  nullptr, postOp,
-             Recv, ncclShmem.groups[group].srcs,
-             Dst, ncclShmem.groups[group].dsts,
-             workSize);
+          reduceCopy<Unroll, RedOp, T, 0, 1, 1, 0, 1, 1, /*PreOpSrcs*/ 0>(
+              tid, nworkers, ncclShmem.redOpArgs[0], nullptr, postOp, Recv,
+              ncclShmem.groups[group].srcs, Dst, ncclShmem.groups[group].dsts,
+              workSize);
+          printf(
+              "[tid=%d]DirectSend && !DirectRecv && SrcBuf != Input && "
+              "ncclShmem.groups[group].dsts[Dst] == nullptr\n nsrc=%d src=%p "
+              "ndst=%d dst=%p\n",
+              tid, Recv, ncclShmem.groups[group].srcs[0], Dst,
+              ncclShmem.groups[group].dsts[0]);
         } else {
-          constexpr int PreOpSrcs = SrcBuf != Input ? 0 :
-                                    DirectRecv*MaxRecv == NCCL_MAX_DIRECT_ARITY ? (1+NCCL_MAX_DIRECT_ARITY) : 1;
-          reduceCopy<Unroll, RedOp, T,
-            MultimemSrcs, Recv+Src, Recv*MaxRecv+Src,
-            MultimemDsts, Send+Dst, Send*MaxSend+Dst, PreOpSrcs>
-            (tid, nworkers, ncclShmem.redOpArgs[0], ncclShmem.redOpArgs, postOp,
-             Recv*fan.nrecv()+Src, ncclShmem.groups[group].srcs,
-             Send*fan.nsend()+Dst, ncclShmem.groups[group].dsts,
-             workSize);
+          constexpr int PreOpSrcs =
+              SrcBuf != Input ? 0
+              : DirectRecv * MaxRecv == NCCL_MAX_DIRECT_ARITY
+                  ? (1 + NCCL_MAX_DIRECT_ARITY)
+                  : 1;
+          reduceCopy<Unroll, RedOp, T, MultimemSrcs, Recv + Src,
+                     Recv * MaxRecv + Src, MultimemDsts, Send + Dst,
+                     Send * MaxSend + Dst, PreOpSrcs>(
+              tid, nworkers, ncclShmem.redOpArgs[0], ncclShmem.redOpArgs,
+              postOp, Recv * fan.nrecv() + Src, ncclShmem.groups[group].srcs,
+              Send * fan.nsend() + Dst, ncclShmem.groups[group].dsts, workSize);
+          printf("[tid=%d] ELSE nsrc=%d src=%p ndst=%d dst=%p\n", tid,
+                 Recv * fan.nrecv() + Src, ncclShmem.groups[group].srcs[0],
+                 Recv * fan.nsend() + Dst, ncclShmem.groups[group].dsts[0]);
         }
         barrier(); // This barrier has a counterpart in following loop
         postPeer<Recv, Send>(0 < sliceSize);
@@ -338,8 +363,6 @@ class Primitives<
               reduceCopy<Unroll, RedOp, T, 0,1,1, 0,1,1, PreOpSrcs>(tid, nworkers, ncclShmem.redOpArgs[0], ncclShmem.redOpArgs, false, 1, &src0, 1, ncclShmem.groups[group].dsts+i, realPeerSize);
               // Mark for threadfence at the end
               fenceNeeded |= true;
-              printf("[tid=%d] SEND src=%p dst=%p\n", tid, src0,
-                     ncclShmem.groups[group].dsts[i]);
             }
           }
         } else if (Recv) {
@@ -357,9 +380,11 @@ class Primitives<
             void* dst0 = (T*)ncclShmem.groups[group].dsts[0] + pOffset;
             ssize_t realPeerSize = min(realSize, totalElem-pOffset);
             if (DirectRecv && ncclShmem.groups[group].srcs[i] == dst0) realPeerSize = 0;
-            if (realPeerSize > 0) reduceCopy<Unroll, RedOp, T, 0,1,1, 0,1,1, /*PreOpSrcs=*/0>(tid, nworkers, ncclShmem.redOpArgs[0], ncclShmem.redOpArgs, postOp, 1, ncclShmem.groups[group].srcs+i, 1, &dst0, realPeerSize);
-            printf("[tid=%d] RECV src=%p dst=%p\n", tid,
-                   ncclShmem.groups[group].srcs[i], dst0);
+            if (realPeerSize > 0)
+              reduceCopy<Unroll, RedOp, T, 0, 1, 1, 0, 1, 1, /*PreOpSrcs=*/0>(
+                  tid, nworkers, ncclShmem.redOpArgs[0], ncclShmem.redOpArgs,
+                  postOp, 1, ncclShmem.groups[group].srcs + i, 1, &dst0,
+                  realPeerSize);
           }
         }
       }
