@@ -1092,7 +1092,7 @@ ncclResult_t ncclIbIsend(void* sendComm, void* data, int size, int tag, void* mh
   struct ncclIbSendComm* comm = (struct ncclIbSendComm*)sendComm;
   if (comm->ready == 0) { WARN("NET/IB: ncclIbIsend() called when comm->ready == 0"); return ncclInternalError; }
   if (comm->ready == 0) { *request = NULL; return ncclSuccess; }
-  LOG_MOD(NCCL_MOD, "nccl id isend\n");
+  LOG_MOD(NCCL_MOD, "nccl id isend");
   struct ibv_mr* mr = (struct ibv_mr*)mhandle;
 
   // Wait for the receiver to have posted the corresponding receive

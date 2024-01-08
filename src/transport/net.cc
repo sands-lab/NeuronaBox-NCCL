@@ -1213,7 +1213,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
 }
 
 static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct ncclProxyArgs* args) {
-  LOG_MOD(NCCL_MOD, "recv proxy progress op ready");
+  LOG_MOD(NCCL_MOD, "recv proxy progress op");
   if (args->state == ncclProxyOpReady) {
     // Initialize subs and group them by same recvComm.
     void* recvComm;

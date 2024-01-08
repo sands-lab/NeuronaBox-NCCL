@@ -338,6 +338,8 @@ class Primitives<
               reduceCopy<Unroll, RedOp, T, 0,1,1, 0,1,1, PreOpSrcs>(tid, nworkers, ncclShmem.redOpArgs[0], ncclShmem.redOpArgs, false, 1, &src0, 1, ncclShmem.groups[group].dsts+i, realPeerSize);
               // Mark for threadfence at the end
               fenceNeeded |= true;
+              printf("[tid=%d] SEND src=%p dst=%p\n", tid, src0,
+                     ncclShmem.groups[group].dsts[i]);
             }
           }
         } else if (Recv) {
@@ -356,6 +358,8 @@ class Primitives<
             ssize_t realPeerSize = min(realSize, totalElem-pOffset);
             if (DirectRecv && ncclShmem.groups[group].srcs[i] == dst0) realPeerSize = 0;
             if (realPeerSize > 0) reduceCopy<Unroll, RedOp, T, 0,1,1, 0,1,1, /*PreOpSrcs=*/0>(tid, nworkers, ncclShmem.redOpArgs[0], ncclShmem.redOpArgs, postOp, 1, ncclShmem.groups[group].srcs+i, 1, &dst0, realPeerSize);
+            printf("[tid=%d] RECV src=%p dst=%p\n", tid,
+                   ncclShmem.groups[group].srcs[i], dst0);
           }
         }
       }
@@ -378,6 +382,7 @@ class Primitives<
         flags |= NetDeviceUnpack;
       }
       step = conn->step;
+      printf("[tid %d]:loadRecvConn step = %llu\n", tid, step);
       step = roundUp(step, SlicePerChunk*StepPerSlice);
       if (flags & RolePostRecv) {
         connStepPtr = conn->head;
@@ -422,6 +427,8 @@ class Primitives<
     if (flags & (RoleWaitSend|RolePostSend)) {
       auto *conn = &peer->send[connIndex];
       step = conn->step;
+      printf("[tid %d]:loadSendConn step = %llu\n", tid, step);
+
       step = roundUp(step, SlicePerChunk*StepPerSlice);
       if (flags & RolePostSend) {
         connStepPtr = conn->tail;
