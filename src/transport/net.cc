@@ -291,8 +291,8 @@ static ncclResult_t sendConnect(struct ncclComm* comm, struct ncclConnect* conne
   // [0] ncclPollProxyResponse:1179 NCCL INFO
   // resp.opId=0x5628dbfb84b0 matches expected opId=0x5628dbfb84b0
   // [0] sendConnect:314 NCCL INFO sendConnect
-  // ncclPollProxyResponse opId=0x5628dbfb84b0 I guess there is a loop calling
-  // that until we get response
+  // ncclPollProxyResponse opId=0x5628dbfb84b0
+  // I guess there is a loop calling
   // LOG_MOD(NCCL_MOD, "sendConnect");
 
   struct connectMap* map = (connectMap*) send->transportResources;
@@ -766,21 +766,23 @@ static ncclResult_t sendProxyConnect(struct ncclProxyConnection* connection, str
         NCCLCHECK(ncclCudaCalloc(&map->mems[NCCL_NET_MAP_DEVMEM].gpuPtr, map->mems[NCCL_NET_MAP_DEVMEM].size));
       }
       map->mems[NCCL_NET_MAP_DEVMEM].cpuPtr = map->mems[NCCL_NET_MAP_DEVMEM].gpuPtr;
-      printf("DEVMEM, shared = 0, cpuPtr = gpuPtr = %p\n",
-             map->mems[NCCL_NET_MAP_DEVMEM].cpuPtr);
+      LOG_MOD(NCCL_MOD, "DEVMEM, shared = 0, cpuPtr = gpuPtr = %p\n",
+              map->mems[NCCL_NET_MAP_DEVMEM].cpuPtr);
     }
   }
   if (map->sameProcess) {
     NCCLCHECK(ncclCudaHostCalloc(&map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr, map->mems[NCCL_NET_MAP_HOSTMEM].size));
     map->mems[NCCL_NET_MAP_HOSTMEM].gpuPtr = map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr;
-    printf("HOSTMEM, sameProcess = 1, cpuPtr = gpuPtr = %p\n",
-           map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr);
+    LOG_MOD(NCCL_MOD, "HOSTMEM, sameProcess = 1, cpuPtr = gpuPtr = %p\n",
+            map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr);
   } else {
     NCCLCHECK(netCreateShm(map->mems+NCCL_NET_MAP_HOSTMEM));
-    printf("HOSTMEM, sameProcess = 0, called netCreateShm, cpuPtr = %p, gpuPtr "
-           "= %p\n",
-           map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr,
-           map->mems[NCCL_NET_MAP_HOSTMEM].gpuPtr);
+    LOG_MOD(
+        NCCL_MOD,
+        "HOSTMEM, sameProcess = 0, called netCreateShm, cpuPtr = %p, gpuPtr "
+        "= %p\n",
+        map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr,
+        map->mems[NCCL_NET_MAP_HOSTMEM].gpuPtr);
   }
   if (ncclGdrCopy && map->sameProcess && ncclParamGdrCopySyncEnable()) {
     uint64_t *cpuPtr, *gpuPtr;
@@ -795,10 +797,11 @@ static ncclResult_t sendProxyConnect(struct ncclProxyConnection* connection, str
 
   resources->sendMem = (struct ncclSendMem*) NCCL_NET_MAP_GET_POINTER(map, cpu, sendMem);
   resources->recvMem = (struct ncclRecvMem*) NCCL_NET_MAP_GET_POINTER(map, cpu, recvMem);
-  printf("in sendproxy connect, final result is sendMem = %p, recvMem = %p\n",
-         resources->sendMem, resources->recvMems)
-      // Don't give credits yet in shared mode.
-      resources->sendMem->head = map->shared ? -NCCL_STEPS : 0;
+  LOG_MOD(NCCL_MOD,
+          "in sendproxy connect, final result is sendMem = %p, recvMem = %p\n",
+          resources->sendMem, resources->recvMem);
+  // Don't give credits yet in shared mode.
+  resources->sendMem->head = map->shared ? -NCCL_STEPS : 0;
   for (int i=0; i<NCCL_STEPS; i++) resources->recvMem->sizesFifo[i] = -1;
 
   for (int p=0; p<NCCL_NUM_PROTOCOLS; p++) {
@@ -926,14 +929,14 @@ static ncclResult_t recvProxyConnect(struct ncclProxyConnection* connection, str
         NCCLCHECK(ncclCudaCalloc(&map->mems[NCCL_NET_MAP_DEVMEM].gpuPtr, map->mems[NCCL_NET_MAP_DEVMEM].size));
       }
       map->mems[NCCL_NET_MAP_DEVMEM].cpuPtr = map->mems[NCCL_NET_MAP_DEVMEM].gpuPtr;
-      printf("DEVMEM, shared = 0, cpuPtr = gpuPtr = %p\n",
-             map->mems[NCCL_NET_MAP_DEVMEM].cpuPtr);
+      LOG_MOD(NCCL_MOD, "DEVMEM, shared = 0, cpuPtr = gpuPtr = %p\n",
+              map->mems[NCCL_NET_MAP_DEVMEM].cpuPtr);
     }
   }
   NCCLCHECK(ncclCudaHostCalloc(&map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr, map->mems[NCCL_NET_MAP_HOSTMEM].size));
   map->mems[NCCL_NET_MAP_HOSTMEM].gpuPtr = map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr;
-  printf("HOSTMEM, cpuPtr = gpuPtr = %p\n",
-         map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr);
+  LOG_MOD(NCCL_MOD, "HOSTMEM, cpuPtr = gpuPtr = %p\n",
+          map->mems[NCCL_NET_MAP_HOSTMEM].cpuPtr);
   if (ncclGdrCopy && map->sameProcess) {
     uint64_t *cpuPtr, *gpuPtr;
     NCCLCHECK(ncclGdrCudaCalloc(&cpuPtr, &gpuPtr, 2, &resources->gdrDesc));
@@ -950,9 +953,10 @@ static ncclResult_t recvProxyConnect(struct ncclProxyConnection* connection, str
 
   resources->sendMem = (struct ncclSendMem*) NCCL_NET_MAP_GET_POINTER(map, cpu, sendMem);
   resources->recvMem = (struct ncclRecvMem*) NCCL_NET_MAP_GET_POINTER(map, cpu, recvMem);
-  printf("in recvproxy connect, final result is sendMem = %p, recvMem = %p\n",
-         resources->sendMem,
-         resources->recvMem) for (int p = 0; p < NCCL_NUM_PROTOCOLS; p++) {
+  LOG_MOD(NCCL_MOD,
+          "in recvproxy connect, final result is sendMem = %p, recvMem = %p\n",
+          resources->sendMem, resources->recvMem);
+  for (int p = 0; p < NCCL_NUM_PROTOCOLS; p++) {
     resources->buffers[p] = NCCL_NET_MAP_GET_POINTER(map, cpu, buffs[p]);
     if (resources->buffers[p]) {
 #if CUDA_VERSION >= 11070
@@ -1098,6 +1102,13 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
       struct sendNetResources* resources = (struct sendNetResources*) (sub->connection->transportResources);
       void* mhandle = resources->mhandles[p];
       int stepSize = resources->buffSizes[p] / NCCL_STEPS;
+      if (resources->shared) {
+        LOG_MOD(NCCL_MOD, "resources is shared for sub %d", s);
+      } else {
+        LOG_MOD(NCCL_MOD, "resources is not shared for sub %d", s);
+      }
+      // buffs is not declared, but this marco allows that
+      // offsets.buffs[p]
       char* localBuff = NCCL_NET_MAP_GET_POINTER(&resources->map, cpu, buffs[p]);
       int buffSize = stepSize*args->sliceSteps;
       if (sub->nbytes < buffSize) buffSize = sub->nbytes;
@@ -1336,6 +1347,13 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
                 struct ncclProxySubArgs* sub = subGroup + i;
                 if (step < sub->nsteps) {
                   struct recvNetResources* resources = (struct recvNetResources*) (sub->connection->transportResources);
+                  if (resources->shared) {
+                    LOG_MOD(NCCL_MOD, "resources is shared for subg %d, id %i",
+                            s, i);
+                  } else {
+                    LOG_MOD(NCCL_MOD,
+                            "resource is not shared for subg %d, id %i", s, i);
+                  }
                   int stepSize = resources->buffSizes[p] / NCCL_STEPS;
                   char* localBuff = NCCL_NET_MAP_GET_POINTER(&resources->map, cpu, buffs[p]);
                   int buffSlot = (sub->base+sub->posted)%NCCL_STEPS;
