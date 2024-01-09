@@ -1102,11 +1102,12 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
       struct sendNetResources* resources = (struct sendNetResources*) (sub->connection->transportResources);
       void* mhandle = resources->mhandles[p];
       int stepSize = resources->buffSizes[p] / NCCL_STEPS;
-      if (resources->shared) {
-        LOG_MOD(NCCL_MOD, "resources is shared for sub %d", s);
-      } else {
-        LOG_MOD(NCCL_MOD, "resources is not shared for sub %d", s);
-      }
+      // if (resources->shared) {
+      //   LOG_MOD(NCCL_MOD, "resources is shared for sub %d", s);
+      // } else {
+      //   LOG_MOD(NCCL_MOD, "resources is not shared for sub %d", s);
+      // }
+      //! again, not shared
       // buffs is not declared, but this marco allows that
       // offsets.buffs[p]
       char* localBuff = NCCL_NET_MAP_GET_POINTER(&resources->map, cpu, buffs[p]);
@@ -1347,13 +1348,16 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
                 struct ncclProxySubArgs* sub = subGroup + i;
                 if (step < sub->nsteps) {
                   struct recvNetResources* resources = (struct recvNetResources*) (sub->connection->transportResources);
-                  if (resources->shared) {
-                    LOG_MOD(NCCL_MOD, "resources is shared for subg %d, id %i",
-                            s, i);
-                  } else {
-                    LOG_MOD(NCCL_MOD,
-                            "resource is not shared for subg %d, id %i", s, i);
-                  }
+                  // if (resources->shared) {
+                  //   LOG_MOD(NCCL_MOD, "resources is shared for subg %d, id
+                  //   %i",
+                  //           s, i);
+                  // } else {
+                  //   LOG_MOD(NCCL_MOD,
+                  //           "resource is not shared for subg %d, id %i", s,
+                  //           i);
+                  // }
+                  //! seems it is always not shared
                   int stepSize = resources->buffSizes[p] / NCCL_STEPS;
                   char* localBuff = NCCL_NET_MAP_GET_POINTER(&resources->map, cpu, buffs[p]);
                   int buffSlot = (sub->base+sub->posted)%NCCL_STEPS;

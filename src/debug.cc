@@ -173,29 +173,27 @@ void ncclDebugLog(ncclDebugLogLevel level, unsigned long flags, const char *file
 
   char buffer[1024];
   size_t len = 0;
-  pthread_t pth = pthread_self();
-  char namebuf[16];
-  pthread_getname_np(pth, namebuf, 16);
+  // pthread_t pth = pthread_self();
+  // char namebuf[16];
+  // pthread_getname_np(pth, namebuf, 16);
   if (level == NCCL_LOG_WARN) {
-    len =
-        snprintf(buffer, sizeof(buffer), "\n%s:%d:%d:%s [%d] %s:%d NCCL WARN ",
-                 hostname, pid, tid, namebuf, cudaDev, filefunc, line);
+    len = snprintf(buffer, sizeof(buffer), "\n%s:%d:%d [%d] %s:%d NCCL WARN ",
+                   hostname, pid, tid, cudaDev, filefunc, line);
     if (ncclParamWarnSetDebugInfo()) ncclDebugLevel = NCCL_LOG_INFO;
   } else if (level == NCCL_LOG_INFO) {
-    len = snprintf(buffer, sizeof(buffer), "%s:%d:%d:%s [%d] %s:%d NCCL INFO ",
-                   hostname, pid, tid, namebuf, cudaDev, filefunc, line);
+    len = snprintf(buffer, sizeof(buffer), "%s:%d:%d [%d] %s:%d NCCL INFO ",
+                   hostname, pid, tid, cudaDev, filefunc, line);
   } else if (level == NCCL_LOG_TRACE && flags == NCCL_CALL) {
     len = snprintf(buffer, sizeof(buffer), "%s:%d:%d NCCL CALL ", hostname, pid, tid);
   } else if (level == NCCL_LOG_TRACE) {
     auto delta = std::chrono::steady_clock::now() - ncclEpoch;
     double timestamp = std::chrono::duration_cast<std::chrono::duration<double>>(delta).count()*1000;
-    len = snprintf(buffer, sizeof(buffer),
-                   "%s:%d:%d:%s [%d] %f %s:%d NCCL TRACE ", hostname, pid, tid,
-                   namebuf, cudaDev, timestamp, filefunc, line);
+    len = snprintf(buffer, sizeof(buffer), "%s:%d:%d [%d] %f %s:%d NCCL TRACE ",
+                   hostname, pid, tid, cudaDev, timestamp, filefunc, line);
   } else if (level == NCCL_LOG_MOD) {
 
-    len = snprintf(buffer, sizeof(buffer), "%s:%d:%d:%s [%d] %s:%d NCCL MOD ",
-                   hostname, pid, tid, namebuf, cudaDev, filefunc, line);
+    len = snprintf(buffer, sizeof(buffer), "%s:%d:%d [%d] %s:%d NCCL MOD ",
+                   hostname, pid, tid, cudaDev, filefunc, line);
   }
 
   if (len) {

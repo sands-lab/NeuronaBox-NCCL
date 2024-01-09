@@ -202,6 +202,8 @@ class Primitives<
     if (tid < nworkers && offset < nelem) {
       printf("[tid=%d] DR%d DS%d R%d S%d Src%d Dst%d\n", tid, DirectRecv,
              DirectSend, Recv, Send, Src, Dst);
+      //! observation:
+      // Asymtric between rank 0 and rank 1
 // Worker-only loop for non-empty slices. Non-workers and empty slices are
 // processed in the loop following this if block. The benefit of splitting
 // the loop like this is we pull two branches out of the critical path.
@@ -268,6 +270,7 @@ class Primitives<
                 tid, nworkers, /*redArg*/ 0, /*preOpArgs*/ nullptr,
                 /*postOp*/ false, 1, ncclShmem.groups[group].srcs, fan.nsend(),
                 ncclShmem.groups[group].dsts + 1, workSize);
+            // never entered since DR is always 0!
             printf("[tid=%d] DirectRecv;Send nsrc=%d src=%p ndst=%d dst=%p\n",
                    tid, 1, ncclShmem.groups[group].srcs[0], fan.nsend(),
                    ncclShmem.groups[group].dsts[1]);
@@ -279,6 +282,7 @@ class Primitives<
               tid, nworkers, ncclShmem.redOpArgs[0], nullptr, postOp, Recv,
               ncclShmem.groups[group].srcs, Dst, ncclShmem.groups[group].dsts,
               workSize);
+          // never entered from logs
           printf(
               "[tid=%d]DirectSend && !DirectRecv && SrcBuf != Input && "
               "ncclShmem.groups[group].dsts[Dst] == nullptr\n nsrc=%d src=%p "
