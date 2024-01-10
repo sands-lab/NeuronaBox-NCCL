@@ -1225,7 +1225,7 @@ static ncclResult_t topoGetAlgoInfo(struct ncclInfo* info, int collNetSupport, i
   int nc = (info->nChannels > 0) ? info->nChannels : comm->nChannels;
   int nt = comm->maxThreads[info->algorithm][info->protocol];
   int threadThreshold = comm->threadThresholds[info->algorithm][info->protocol];
-  LOG_MOD(NCCL_MOD, "originally nc=%d, nt=%d, threadThreshold=%d, nbytes=%d", nc, nt, threadThreshold, info->nBytes);
+  // LOG_MOD(NCCL_MOD, "originally nc=%d, nt=%d, threadThreshold=%d, nbytes=%d", nc, nt, threadThreshold, info->nBytes);
   if (info->algorithm == NCCL_ALGO_COLLNET_DIRECT) {
     // CollNet channel tuning
     int ncSwitch = 16;
@@ -1248,7 +1248,7 @@ static ncclResult_t topoGetAlgoInfo(struct ncclInfo* info, int collNetSupport, i
       else break;
     }
   }
-  LOG_MOD(NCCL_MOD, "tuned nc=%d, nt=%d, threadThreshold=%d, nbytes=%d", nc, nt, threadThreshold, info->nBytes);
+  // LOG_MOD(NCCL_MOD, "tuned nc=%d, nt=%d, threadThreshold=%d, nbytes=%d", nc, nt, threadThreshold, info->nBytes);
   if (info->protocol == NCCL_PROTO_SIMPLE) {
     if (info->algorithm == NCCL_ALGO_RING) nt += WARP_SIZE; // Extra warp for sync
     // More threads or sync warps needed due to split thread model

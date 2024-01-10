@@ -246,7 +246,7 @@ ncclResult_t printProxyOp(struct ncclProxyArgs* op, int poolIndex, int opIndex) 
   printf("[%d-%d|%ld| %s #sub%d", poolIndex, opIndex, op->opCount, op->pattern == ncclPatternSend ? "Send" : op->pattern == ncclPatternRecv ? "Recv" : op->pattern == ncclPatternRingTwice ?"RingTwice" : "Coll", op->nsubs);
   for (int s=0; s<op->nsubs; s++) {
     struct ncclProxySubArgs* sub = op->subs+s;
-    printf(" {#s%d,#b%d@%d} ", sub->nsteps, sub->nbytes, sub->channelId);
+    printf(" {#s%d,#b%ld@%d} ", sub->nsteps, sub->nbytes, sub->channelId);
     if (op->state == ncclProxyOpProgress) {
       char status = ' ';
       if (op->pattern == ncclPatternRecv) {
@@ -305,7 +305,7 @@ ncclResult_t dumpProxyState(struct ncclProxyProgressState* state) {
   }
   printf("[X]\n");
 
-# if 1
+# if 0
   printf("FREE OPS\n");
   op = state->pool;
   while (op) {

@@ -452,7 +452,7 @@ static ncclResult_t recvConnect(struct ncclComm* comm, struct ncclConnect* conne
 
   for (int p=0; p<NCCL_NUM_PROTOCOLS; p++) {
     recv->conn.buffs[p] = NCCL_NET_MAP_GET_POINTER(map, gpu, buffs[p]);
-    LOG_MOD(NCCL_MOD, "recv->conn.buffs[%d]=%p", p, send->conn.buffs[p]);
+    LOG_MOD(NCCL_MOD, "recv->conn.buffs[%d]=%p", p, recv->conn.buffs[p]);
   }
   if (recv->proxyConn.sameProcess) {
     if (recv->proxyConn.connection->netDeviceHandle) {
