@@ -411,7 +411,8 @@ class Primitives<
         flags |= NetDeviceUnpack;
       }
       step = conn->step;
-      printf("[tid %d]:loadRecvConn step = %llu\n", tid, step);
+      printf("[tid %d]:loadRecvConn tail=%p, head=%p, buff[simple]=%p\n", tid, conn->tail, conn->head, conn->buffs[NCCL_PROTO_SIMPLE]);
+
       step = roundUp(step, SlicePerChunk*StepPerSlice);
       if (flags & RolePostRecv) {
         connStepPtr = conn->head;
@@ -510,7 +511,11 @@ class Primitives<
     ):
     tid(tid), nthreads(nthreads), tidInBlock(threadIdx.x), group(group),
     stepSize(stepSize_ == 0 ? ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE]/NCCL_STEPS/sizeof(T) : stepSize_) {
-
+    if (tid == 0) {
+      printf("At primitives init: nthreads=%d, tid=%d, tidInBlk=%d, group=%d, "
+             "stepsize=%d\n",
+             nthreads, tid, tidInBlock, group, stepSize);
+    }
     // For send operations, we need an extra warp to overlap the threadfence and the copy
     this->nworkers = nthreads - (MaxSend > 0 && nthreads-WARP_SIZE >= 64 ? WARP_SIZE : 0);
 

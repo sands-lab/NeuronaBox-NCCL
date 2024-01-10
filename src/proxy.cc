@@ -243,9 +243,10 @@ ncclResult_t getOpIndex(struct ncclProxyArgs* op, struct ncclProxyProgressState*
 }
 
 ncclResult_t printProxyOp(struct ncclProxyArgs* op, int poolIndex, int opIndex) {
-  printf("[%d-%d|%ld| %s", poolIndex, opIndex, op->opCount, op->pattern == ncclPatternSend ? "Send" : op->pattern == ncclPatternRecv ? "Recv" : "Coll");
+  printf("[%d-%d|%ld| %s #sub%d", poolIndex, opIndex, op->opCount, op->pattern == ncclPatternSend ? "Send" : op->pattern == ncclPatternRecv ? "Recv" : op->pattern == ncclPatternRingTwice ?"RingTwice" : "Coll", op->nsubs);
   for (int s=0; s<op->nsubs; s++) {
     struct ncclProxySubArgs* sub = op->subs+s;
+    printf(" {#s%d,#b%d@%d} ", sub->nsteps, sub->nbytes, sub->channelId);
     if (op->state == ncclProxyOpProgress) {
       char status = ' ';
       if (op->pattern == ncclPatternRecv) {
@@ -260,10 +261,12 @@ ncclResult_t printProxyOp(struct ncclProxyArgs* op, int poolIndex, int opIndex) 
         else if (sub->transmitted < sub->posted) status = 'G'; // Waiting on GPU
         else if (sub->done < sub->transmitted) status = 'S'; // Sending
         else status = 'D'; // Done
+      } else if (op->pattern == ncclPatternRingTwice) {
+        status = 'N';  
       }
-      printf(" %d%c/%d", sub->peer, status, sub->channelId);
+      //printf(" %d%c/%d", sub->peer, status, sub->channelId);
     } else {
-      printf(" %d/%d", sub->peer, sub->channelId);
+      //printf(" %d/%d", sub->peer, sub->channelId);
     }
   }
   printf("]");
@@ -302,7 +305,7 @@ ncclResult_t dumpProxyState(struct ncclProxyProgressState* state) {
   }
   printf("[X]\n");
 
-# if 0
+# if 1
   printf("FREE OPS\n");
   op = state->pool;
   while (op) {
@@ -376,6 +379,8 @@ static ncclResult_t ncclProxyOpToArgs(struct ncclProxyOp* op, struct ncclProxyAr
     }
     return ncclSuccess;
   }
+  LOG_MOD(NCCL_MOD, "Append First Sub on Proxt OP");
+  LOG_MOD(NCCL_MOD, "op->opCount: %ld, op->sliceSteps: %d, op->chunkSteps: %d, op->chunkSize: %d, op->dtype: %d, op->redOp: %d, op->pattern: %d, op->protocol: %d", op->opCount, op->sliceSteps, op->chunkSteps, op->chunkSize, op->dtype, op->redOp, op->pattern, op->protocol);
   //memset(&args->progress, 0, sizeof(struct ncclProxyArgs)-offsetof(struct ncclProxyArgs, progress));
   args->done = 0;
   args->opCount = op->opCount;
@@ -425,6 +430,9 @@ static ncclResult_t ProxyAppend(struct ncclProxyProgressState* state, struct ncc
       DEBUG_PROXY_PRINT("Insert  %5ld (%d/%5ld) as last element\n", OP_INDEX(args), shared, args->opCount);
     }
     *(args->proxyAppendPtr) = args;
+  }
+  if (DEBUG_PROXY) {
+    NCCLCHECK(dumpProxyState(state));
   }
   return ncclSuccess;
 }
@@ -669,7 +677,7 @@ static ncclResult_t removeOp(struct ncclProxyProgressState* state, struct ncclPr
   }
   freeOp->next = state->pool;
   state->pool = freeOp;
-  DEBUG_PROXY_PRINT("Removed %5ld (%5ld) : ", OP_INDEX(freeOp), OP_INDEX(*freeOp->proxyAppendPtr));
+  DEBUG_PROXY_PRINT("Removed %5ld (%5ld) : \n", OP_INDEX(freeOp), OP_INDEX(*freeOp->proxyAppendPtr));
 #ifdef DEBUG_PROXY
   NCCLCHECK(dumpProxyState(state));
 #endif
@@ -1068,7 +1076,7 @@ ncclResult_t ncclProxyConnect(struct ncclComm* comm, int transport, int send, in
       proxyOps->nextOps = proxyOps->nextOpsEnd = proxyOps->freeOp = -1;
     }
   }
-  INFO(NCCL_NET|NCCL_PROXY, "Connected to proxy localRank %d -> connection %p", proxyConn->tpLocalRank, proxyConn->connection);
+  INFO(NCCL_NET|NCCL_PROXY, "Connected to proxy localRank %d -> connection %p tcomm send=%d", proxyConn->tpLocalRank, proxyConn->connection, send);
   return ncclSuccess;
 }
 

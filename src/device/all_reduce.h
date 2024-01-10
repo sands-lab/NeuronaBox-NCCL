@@ -29,7 +29,10 @@ namespace {
       // We should not need the final /2 but it makes performance much, much smoother. Might be a bug somewhere.
       minChunkSize = nthreads*(Proto::calcBytePerGrain()/sizeof(T))/2;
     }
-
+    if (tid == 0) {
+      printf("inside all reduce run_ring! nthread=%d, proto:id=%d\n", nthreads,
+             Proto::Id);
+    }
     Primitives<T, RedOp, FanSymmetric<1>, 1, Proto, 0> prims
       (tid, nthreads, &ring->prev, &ring->next, args->sendbuff, args->recvbuff, args->redOpArg);
 
@@ -56,9 +59,7 @@ namespace {
       ssize_t offset;
       int nelem;
       int chunk;
-      if (tid == 0) {
-        printf("inside all reduce run_ring! tid=%d\n", tid);
-      }
+
       // step 0: push data to next GPU
       chunk = modRanks(ringIx + nranks-1);
       offset = calcOffset(chunk);

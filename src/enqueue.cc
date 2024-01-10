@@ -1225,6 +1225,7 @@ static ncclResult_t topoGetAlgoInfo(struct ncclInfo* info, int collNetSupport, i
   int nc = (info->nChannels > 0) ? info->nChannels : comm->nChannels;
   int nt = comm->maxThreads[info->algorithm][info->protocol];
   int threadThreshold = comm->threadThresholds[info->algorithm][info->protocol];
+  LOG_MOD(NCCL_MOD, "originally nc=%d, nt=%d, threadThreshold=%d, nbytes=%d", nc, nt, threadThreshold, info->nBytes);
   if (info->algorithm == NCCL_ALGO_COLLNET_DIRECT) {
     // CollNet channel tuning
     int ncSwitch = 16;
@@ -1247,6 +1248,7 @@ static ncclResult_t topoGetAlgoInfo(struct ncclInfo* info, int collNetSupport, i
       else break;
     }
   }
+  LOG_MOD(NCCL_MOD, "tuned nc=%d, nt=%d, threadThreshold=%d, nbytes=%d", nc, nt, threadThreshold, info->nBytes);
   if (info->protocol == NCCL_PROTO_SIMPLE) {
     if (info->algorithm == NCCL_ALGO_RING) nt += WARP_SIZE; // Extra warp for sync
     // More threads or sync warps needed due to split thread model
@@ -1333,7 +1335,6 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
   // Set nstepsPerLoop and nchunksPerLoop
   NCCLCHECK(getPatternInfo(info));
   NCCLCHECK(getLoopInfo(info));
-
   work->sendbuff = info->sendbuff;
   work->recvbuff = info->recvbuff;
   work->root = info->root;
@@ -1430,7 +1431,12 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
   // because some protocols need to transmit more than the total size, plus they sometimes
   // round up
   proxyOp->nbytes = stepSize*proxyOp->sliceSteps;
-
+  LOG_MOD(NCCL_MOD, "info->pattern %d, info->nstepsPerLoop %d, info->nchunksPerLoop %d, nloops=%d", info->pattern, info->nstepsPerLoop, info->nchunksPerLoop, nLoops);
+  LOG_MOD(NCCL_MOD,
+          "proxyOp->nsteps=%d, proxyOp->sliceSteps=%d, proxyOp->chunkSteps=%d, proxyOp->chunkSize=%d,proxyOp->protocol=%d,proxyOp->nbytes=%lu",
+                              proxyOp->nsteps,
+          proxyOp->sliceSteps, proxyOp->chunkSteps, proxyOp->chunkSize,
+          proxyOp->protocol, proxyOp->nbytes);
   TRACE(NCCL_COLL,"opCount %lx slicesteps %d spl %d cpl %d nbytes %zi -> protocol %d nchannels %d nthreads %d, nloops %d nsteps %d chunksize %d comm %p",
       proxyOp->opCount, sliceSteps, info->nstepsPerLoop, info->nchunksPerLoop, info->nBytes, info->protocol, info->nChannels, info->nThreads,
       nLoops, proxyOp->nsteps, chunkSize, info->comm);

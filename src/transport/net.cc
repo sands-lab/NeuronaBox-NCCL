@@ -321,6 +321,7 @@ static ncclResult_t sendConnect(struct ncclComm* comm, struct ncclConnect* conne
   INFO(NCCL_PROXY, "sendConnect ncclPollProxyResponse opId=%p", opId);
 
   if (map->sameProcess && !ncclCuMemEnable()) {
+    LOG_MOD(NCCL_MOD, "same process but not cumemenable!");
     if (map->cudaDev != comm->cudaDev) {
       // Enable P2P access for Legacy IPC
       cudaError_t err = cudaDeviceEnablePeerAccess(map->cudaDev, 0);
@@ -332,13 +333,18 @@ static ncclResult_t sendConnect(struct ncclComm* comm, struct ncclConnect* conne
       }
     }
   } else if (!(map->sameProcess && map->cudaDev == comm->cudaDev)) {
-    if (!map->sameProcess) NCCLCHECK(netMapShm(map->mems+NCCL_NET_MAP_HOSTMEM));
+    LOG_MOD(NCCL_MOD, "not same process or not same cuda dev");
+    if (!map->sameProcess) {
+      NCCLCHECK(netMapShm(map->mems+NCCL_NET_MAP_HOSTMEM));
+      LOG_MOD(NCCL_MOD, "not same process, netMapShm called");
+    }
     if (map->mems[NCCL_NET_MAP_DEVMEM].size) {
       NCCLCHECK(ncclP2pImportShareableBuffer(comm, send->proxyConn.tpRank,
                                              map->mems[NCCL_NET_MAP_DEVMEM].size,
                                              &map->mems[NCCL_NET_MAP_DEVMEM].ipcDesc,
                                              (void**)&map->mems[NCCL_NET_MAP_DEVMEM].gpuPtr));
       map->mems[NCCL_NET_MAP_DEVMEM].cpuPtr = NULL;
+      LOG_MOD(NCCL_MOD, "map dev mem size %d, gpuPtr %p", map->mems[NCCL_NET_MAP_DEVMEM].size, map->mems[NCCL_NET_MAP_DEVMEM].gpuPtr);
     }
     if (map->mems[NCCL_NET_MAP_SHARED_DEVMEM].size) {
       void** sharedDevMemPtr = comm->proxyState->sharedDevMems + send->proxyConn.tpLocalRank;
@@ -350,6 +356,7 @@ static ncclResult_t sendConnect(struct ncclComm* comm, struct ncclConnect* conne
       }
       map->mems[NCCL_NET_MAP_SHARED_DEVMEM].gpuPtr = (char*)(*sharedDevMemPtr);
       map->mems[NCCL_NET_MAP_SHARED_DEVMEM].cpuPtr = NULL;
+      LOG_MOD(NCCL_MOD, "map shared dev mem size %d, gpuPtr %p", map->mems[NCCL_NET_MAP_SHARED_DEVMEM].size, map->mems[NCCL_NET_MAP_SHARED_DEVMEM].gpuPtr);
     }
   }
   //NCCLCHECK(netDumpMap(map));
@@ -359,14 +366,16 @@ static ncclResult_t sendConnect(struct ncclComm* comm, struct ncclConnect* conne
   send->conn.head = gdcMem ? (uint64_t*)gdcMem : &sendMem->head;
 
   struct ncclRecvMem *recvMem = (struct ncclRecvMem*) NCCL_NET_MAP_GET_POINTER(map, gpu, recvMem);
+  LOG_MOD(NCCL_MOD, "sendMem=%p recvMem=%p", sendMem, recvMem);
   send->conn.tail = &recvMem->tail;
   send->conn.sizesFifo = recvMem->sizesFifo;
   // Only fuse P2P buffers, continue to allocate dedicated buffers for ring/tree
   send->conn.offsFifo = map->shared ? recvMem->offsFifo : NULL;
 
-  for (int p=0; p<NCCL_NUM_PROTOCOLS; p++)
+  for (int p=0; p<NCCL_NUM_PROTOCOLS; p++) {
     send->conn.buffs[p] = NCCL_NET_MAP_GET_POINTER(map, gpu, buffs[p]);
-
+    LOG_MOD(NCCL_MOD, "send->conn.buffs[%d]=%p", p, send->conn.buffs[p]);
+  }
   if (send->proxyConn.sameProcess) {
     if (send->proxyConn.connection->netDeviceHandle) {
       send->conn.netDeviceHandle = *send->proxyConn.connection->netDeviceHandle;
@@ -433,15 +442,18 @@ static ncclResult_t recvConnect(struct ncclComm* comm, struct ncclConnect* conne
   recv->conn.head = &sendMem->head;
 
   struct ncclRecvMem *recvMem = (struct ncclRecvMem*) NCCL_NET_MAP_GET_POINTER(map, gpu, recvMem);
+  LOG_MOD(NCCL_MOD, "sendMem=%p recvMem=%p", sendMem, recvMem);
+
   void* gdcMem = map->mems[NCCL_NET_MAP_GDCMEM].gpuPtr;
   recv->conn.tail = gdcMem ? (uint64_t*)gdcMem : &recvMem->tail;
   recv->conn.sizesFifo = recvMem->sizesFifo;
   // Only fuse P2P buffers, continue to allocate dedicated buffers for ring/tree
   recv->conn.offsFifo = map->shared ? recvMem->offsFifo : NULL;
 
-  for (int p=0; p<NCCL_NUM_PROTOCOLS; p++)
+  for (int p=0; p<NCCL_NUM_PROTOCOLS; p++) {
     recv->conn.buffs[p] = NCCL_NET_MAP_GET_POINTER(map, gpu, buffs[p]);
-
+    LOG_MOD(NCCL_MOD, "recv->conn.buffs[%d]=%p", p, send->conn.buffs[p]);
+  }
   if (recv->proxyConn.sameProcess) {
     if (recv->proxyConn.connection->netDeviceHandle) {
       recv->conn.netDeviceHandle = *recv->proxyConn.connection->netDeviceHandle;
@@ -674,7 +686,7 @@ static ncclResult_t ncclNetGetDeviceHandle(ncclNetDeviceType type, int version, 
 }
 
 static ncclResult_t sendProxyConnect(struct ncclProxyConnection* connection, struct ncclProxyState* proxyState, void* reqBuff, int reqSize, void* respBuff, int respSize, int* done) {
-  LOG_MOD(NCCL_MOD, "recvProxyConnect");
+  LOG_MOD(NCCL_MOD, "sendProxyConnect");
 
   struct sendNetResources* resources = (struct sendNetResources*)(connection->transportResources);
   if (reqSize != sizeof(netSendConnectArgs)) return ncclInternalError;
@@ -806,6 +818,7 @@ static ncclResult_t sendProxyConnect(struct ncclProxyConnection* connection, str
 
   for (int p=0; p<NCCL_NUM_PROTOCOLS; p++) {
     resources->buffers[p] = NCCL_NET_MAP_GET_POINTER(map, cpu, buffs[p]);
+    LOG_MOD(NCCL_MOD, "resources->buffers[%d] = %p\n", p, resources->buffers[p]);
     if (resources->buffers[p]) {
 #if CUDA_VERSION >= 11070
       /* DMA-BUF support */
@@ -958,6 +971,7 @@ static ncclResult_t recvProxyConnect(struct ncclProxyConnection* connection, str
           resources->sendMem, resources->recvMem);
   for (int p = 0; p < NCCL_NUM_PROTOCOLS; p++) {
     resources->buffers[p] = NCCL_NET_MAP_GET_POINTER(map, cpu, buffs[p]);
+    LOG_MOD(NCCL_MOD, "resources->buffers[%d] = %p\n", p, resources->buffers[p]);
     if (resources->buffers[p]) {
 #if CUDA_VERSION >= 11070
       /* DMA-BUF support */
