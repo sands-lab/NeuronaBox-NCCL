@@ -1158,8 +1158,8 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
         //! mod here, recvMem is accessble on GPU side, kernel will modify that tail to indicate the data is ready
         //! Since we do the "kernel-bypass", skip the if statement, so that, the data is always ready.😄
         //! hope this will work, though
-        //if (sizesFifo[buffSlot] != -1 && ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL)) 
-        if (true)
+        //! if (sizesFifo[buffSlot] != -1 && ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL)) 
+        if (1)
         {
           // We have something to receive, let's check if it's completely ready.
           int size = sizesFifo[buffSlot];

@@ -1093,13 +1093,14 @@ ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan
     launchConfig.attrs = launchAttrs;
     launchConfig.numAttrs = attrs;
     launchConfig.stream = launchStream;
-
-    CUDACHECK(cudaLaunchKernelExC(&launchConfig, fn, args));
+//! comment cudaLaunchKernelExc
+    //CUDACHECK(cudaLaunchKernelExC(&launchConfig, fn, args));
     return ncclSuccess;
   }
   #endif
   // Standard kernel launch
-  CUDACHECK(cudaLaunchKernel(fn, grid, block, args, smem, launchStream));
+  //! comment cudaLaunchKernel
+  //CUDACHECK(cudaLaunchKernel(fn, grid, block, args, smem, launchStream));
   return ncclSuccess;
 }
 
