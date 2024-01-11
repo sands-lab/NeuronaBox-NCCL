@@ -457,8 +457,8 @@ class Primitives<
     if (flags & (RoleWaitSend|RolePostSend)) {
       auto *conn = &peer->send[connIndex];
       step = conn->step;
-      printf("[tid %d]:loadSendConn step = %llu\n", tid, step);
-
+      printf("[tid %d]:loadSendConn tail=%p, head=%p, buff[simple]=%p\n", tid, conn->tail, conn->head, conn->buffs[NCCL_PROTO_SIMPLE]);
+      
       step = roundUp(step, SlicePerChunk*StepPerSlice);
       if (flags & RolePostSend) {
         connStepPtr = conn->tail;

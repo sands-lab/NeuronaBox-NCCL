@@ -1092,8 +1092,8 @@ static_assert(NCCL_STEPS <= NCCL_NET_MAX_REQUESTS, "Not enough net requests to c
 
 static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
                                       struct ncclProxyArgs *args) {
-  LOG_MOD(NCCL_MOD, "send proxy progress op");
   if (args->state == ncclProxyOpReady) {
+    LOG_MOD(NCCL_MOD, "send proxy progress op ready");
     for (int s = 0; s < args->nsubs; s++) {
       struct ncclProxySubArgs *sub = args->subs + s;
       struct sendNetResources *resources =
@@ -1113,6 +1113,9 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
     for (int s=0; s<args->nsubs; s++) {
       struct ncclProxySubArgs* sub = args->subs+s;
       if (sub->done == sub->nsteps) continue;
+      LOG_MOD(NCCL_MOD, "base%lu, posted%lu, transmitted%lu, done%lu, nbytes%lu, sliceSteps%lu, chunkSteps%lu, maxDepth%d\n",
+              sub->base, sub->posted, sub->transmitted, sub->done, sub->nbytes, args->sliceSteps, args->chunkSteps, maxDepth);
+      usleep(1000);
       struct sendNetResources* resources = (struct sendNetResources*) (sub->connection->transportResources);
       void* mhandle = resources->mhandles[p];
       int stepSize = resources->buffSizes[p] / NCCL_STEPS;
@@ -1152,7 +1155,12 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
         int buffSlot = (sub->base+sub->transmitted)%NCCL_STEPS;
         volatile int* sizesFifo = resources->recvMem->sizesFifo;
         volatile uint64_t* recvTail = &resources->recvMem->tail;
-        if (sizesFifo[buffSlot] != -1 && ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL)) {
+        //! mod here, recvMem is accessble on GPU side, kernel will modify that tail to indicate the data is ready
+        //! Since we do the "kernel-bypass", skip the if statement, so that, the data is always ready.😄
+        //! hope this will work, though
+        //if (sizesFifo[buffSlot] != -1 && ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL)) 
+        if (true)
+        {
           // We have something to receive, let's check if it's completely ready.
           int size = sizesFifo[buffSlot];
           bool shared = (p == NCCL_PROTO_SIMPLE) && resources->shared;
@@ -1228,8 +1236,8 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
 }
 
 static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct ncclProxyArgs* args) {
-  LOG_MOD(NCCL_MOD, "recv proxy progress op");
   if (args->state == ncclProxyOpReady) {
+    LOG_MOD(NCCL_MOD, "recv proxy progress new op");
     // Initialize subs and group them by same recvComm.
     void* recvComm;
     int groupSize = 0;
@@ -1279,6 +1287,9 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
 
       for (int i=0; i<subGroup->groupSize; i++) {
         struct ncclProxySubArgs* sub = subGroup + i;
+        LOG_MOD(NCCL_MOD, "base%lu, posted%lu, transmitted%lu, done%lu, nbytes%lu, sliceSteps%lu, chunkSteps%lu, maxDepth%d\n",
+              sub->base, sub->posted, sub->transmitted, sub->done, sub->nbytes, args->sliceSteps, args->chunkSteps, maxDepth);
+        usleep(1000);
         if (sub->posted < sub->nsteps) {
           if (sub->posted >= sub->done + maxDepth) { subCount = 0; break; }
           struct recvNetResources* resources = (struct recvNetResources*) (sub->connection->transportResources);
@@ -1292,6 +1303,8 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
             volatile int* offsFifo = (volatile int*)resources->recvMem->offsFifo;
             offsFifo[buffSlot] = offset;
             ptrs[subCount] = localBuff+offset;
+            //! modify fifo to indicate next data size;
+            //! but resources->shared is always 0??
           } else {
             ptrs[subCount] = localBuff+buffSlot*stepSize;
           }
@@ -1407,6 +1420,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
               struct recvNetResources* resources = (struct recvNetResources*) (sub->connection->transportResources);
               volatile uint64_t* recvTail = resources->gdcSync ? resources->gdcSync : &resources->recvMem->tail;
               *recvTail = sub->base + sub->transmitted;
+              //! why we touch recv tail here?
               if (resources->gdcSync) wc_store_fence(); // Flush out WC write
             }
           }
@@ -1425,9 +1439,10 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
           struct recvNetResources* resources = (struct recvNetResources*) (sub->connection->transportResources);
           volatile uint64_t* sendHead = &resources->sendMem->head;
           uint64_t done = *sendHead;
-          while (done > sub->base + sub->done &&
+          //! while (done > sub->base + sub->done &&     sub->transmitted > sub->done)
+          //! here we need to modify done=*sendHead, which should be modified by kernel!
               // LL and LL128 can acknowledge 0-bytes send before they even happen. Don't go past what we transmitted.
-              sub->transmitted > sub->done) {
+           while (true && sub->transmitted > sub->done) {
             if (subGroup->recvRequestsCache[sub->done%NCCL_STEPS]) {
               // the multirecv requests are only cached in the first sub.
               if (proxyState->ncclNet->irecvConsumed)
