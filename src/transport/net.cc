@@ -13,8 +13,23 @@
 #include "shm.h"
 #include "p2p.h"
 #include "profiler.h"
+#include <chrono>
 
 static_assert(sizeof(ncclNetHandle_t) <= CONNECT_SIZE, "NET Connect info is too large");
+
+void busy_loop_us(double x) {
+    // Start time
+    auto start = std::chrono::high_resolution_clock::now();
+
+    // Convert microseconds to the appropriate duration type
+    auto duration = std::chrono::microseconds(static_cast<long long>(x));
+
+    // Spin in a loop until the time has passed
+    while (std::chrono::high_resolution_clock::now() - start < duration) {
+        // Busy-waiting, doing nothing
+    }
+    return;
+}
 
 #define NCCL_NET_MAP_HOSTMEM 0
 #define NCCL_NET_MAP_DEVMEM 1
@@ -1161,6 +1176,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
         //! if (sizesFifo[buffSlot] != -1 && ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL)) 
         if (1)
         {
+          busy_loop_us(1000000);
           // We have something to receive, let's check if it's completely ready.
           int size = sizesFifo[buffSlot];
           bool shared = (p == NCCL_PROTO_SIMPLE) && resources->shared;

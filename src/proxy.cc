@@ -217,7 +217,8 @@ static ncclResult_t allocateArgs(struct ncclProxyProgressState* state, struct nc
 
 #define DEBUG_PROXY 0
 #ifdef DEBUG_PROXY
-#define DEBUG_PROXY_PRINT printf
+#define DEBUG_PROXY_PRINT(...)
+//#define DEBUG_PROXY_PRINT printf
 #else
 #define DEBUG_PROXY_PRINT(...)
 #endif
