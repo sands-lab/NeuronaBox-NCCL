@@ -5,7 +5,10 @@ const int KERNEL_BYPASS = 0;
 
 
 struct modCoordinator {
-
+    int send;
+    int recv;
 };
+
+extern modCoordinator coordinator;
 
 #endif

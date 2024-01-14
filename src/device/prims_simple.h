@@ -237,6 +237,10 @@ class Primitives<
 #endif
       do {
         sliceSize = sliceSize < nelem - offset ? sliceSize : nelem - offset;
+        if (tid == 8) {
+          printf("[tid=%d] sliceSize=%d, nelem=%d, offset=%d, slice=%d, sliceperchunk%d\n", tid, sliceSize,
+                 nelem, offset, slice, SlicePerChunk);
+        }
         if (Src && (flags & (SrcBuf == Input ? RoleInput : RoleOutput)))
           ncclShmem.groups[group].srcs[0] = userBuff + srcIx + offset;
         if (Dst && (flags & (DstBuf == Input ? RoleInput : RoleOutput)))

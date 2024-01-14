@@ -1187,11 +1187,10 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
           int size = 0;
           if (KERNEL_BYPASS) {
             //!todo calculate the size
-           //size = sub->nbytes;
+            //size = coodinator.recv - coordinator.send; 
           } else {
             size = sizesFifo[buffSlot];
           }
-          LOG_MOD(NCCL_MOD, "in send proxy progress, size is %d", size);
           bool shared = (p == NCCL_PROTO_SIMPLE) && resources->shared;
           char* buff = shared ? localBuff+resources->recvMem->offsFifo[buffSlot] : localBuff+buffSlot*stepSize;
           int ready = 1;
@@ -1219,6 +1218,9 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
             }
           }
           if (ready) {
+            coordinator.send += size;
+            LOG_MOD(NCCL_MOD, "in send proxy progress, size is %d, p=%d, coor send=%d, coor recv=%d", size, p, coordinator.send, coordinator.recv);
+
             // Data is ready, try to send.
             NCCLCHECK(proxyState->ncclNet->isend(resources->netSendComm, buff, size, resources->tpRank, mhandle, sub->requests+buffSlot));
             if (sub->requests[buffSlot] != NULL) {
@@ -1376,6 +1378,8 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
           int needFlush = 0;
           int totalSize = 0;
           for (int i=0; i<NCCL_PROXY_MAX_SUBS; i++) totalSize += sizes[i];
+          coordinator.recv += totalSize;
+          LOG_MOD(NCCL_MOD, "coord send = %d, recv = %d, totalsize=%d", coordinator.send, coordinator.recv, totalSize);
           for (int i=0; i<subGroup->groupSize; i++) {
             struct ncclProxySubArgs* sub = subGroup + i;
             sub->received += args->sliceSteps;
@@ -1479,7 +1483,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
                 NCCLCHECK(proxyState->ncclNet->irecvConsumed(resources->netRecvComm, subGroup->recvRequestsSubCount, subGroup->recvRequestsCache[sub->done%NCCL_STEPS]));
               subGroup->recvRequestsCache[sub->done%NCCL_STEPS] = NULL;
             }
-            sub->done += args->sliceSteps;
+            sub->done += args->sliceSteps;            
             for (uint64_t step=sub->done-args->sliceSteps; step<sub->done; step++) ncclProfilingRecord(args, s+i, step, ncclProxyProfileEnd);
             args->idle = 0;
             if (sub->done == sub->nsteps) {

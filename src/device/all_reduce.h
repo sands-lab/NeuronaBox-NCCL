@@ -64,6 +64,9 @@ namespace {
       chunk = modRanks(ringIx + nranks-1);
       offset = calcOffset(chunk);
       nelem = min(realChunkSize, size-offset);
+      if (tid==8) {
+        printf("[tid=%d][all_reduce.h] send to next gpu, chunk=%d, offset=%lu, nelem=%d\n", tid, chunk, offset, nelem);
+      }
       prims.send(offset, nelem);
 
       // k-2 steps: reduce and copy to next GPU
@@ -71,6 +74,9 @@ namespace {
         chunk = modRanks(ringIx + nranks-j);
         offset = calcOffset(chunk);
         nelem = min(realChunkSize, size-offset);
+        if (tid==8) {
+          printf("[tid=%d][all_reduce.h] recvReduceSend to next gpu, chunk=%d, offset=%lu, nelem=%d\n", tid, chunk, offset, nelem);
+        }
         prims.recvReduceSend(offset, nelem);
       }
 
@@ -79,21 +85,33 @@ namespace {
       chunk = ringIx + 0;
       offset = calcOffset(chunk);
       nelem = min(realChunkSize, size-offset);
+      if (tid==8) {
+        printf("[tid=%d][all_reduce.h] directRecvReduceCopySend to next gpu, chunk=%d, offset=%lu, nelem=%d\n", tid, chunk,  offset, nelem);
+      }
       prims.directRecvReduceCopySend(offset, offset, nelem, /*postOp=*/true);
+
 
       // k-2 steps: copy to next GPU
       for (int j=1; j<nranks-1; ++j) {
         chunk = modRanks(ringIx + nranks-j);
         offset = calcOffset(chunk);
         nelem = min(realChunkSize, size-offset);
+        if (tid==8) {
+          printf("[tid=%d][all_reduce.h] directRecvCopySend to next gpu, chunk=%d, offset=%lu, nelem=%d\n", tid, chunk, offset, nelem);
+        }
         prims.directRecvCopySend(offset, nelem);
+
       }
 
       // Make final copy from buffer to dest.
       chunk = modRanks(ringIx + 1);
       offset = calcOffset(chunk);
       nelem = min(realChunkSize, size-offset);
+      if (tid==8) {
+        printf("[tid=%d][all_reduce.h] directRecv to userbuffer, chunk=%d, offset=%lu, nelem=%d\n",  tid, chunk, offset, nelem);
+      }
       prims.directRecv(offset, nelem);
+
     }
   }
 
