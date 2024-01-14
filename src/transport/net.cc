@@ -1131,7 +1131,6 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
       if (sub->done == sub->nsteps) continue;
       LOG_MOD(NCCL_MOD, "base%lu, posted%lu, transmitted%lu, done%lu, nbytes%lu, maxDepth%d\n",
               sub->base, sub->posted, sub->transmitted, sub->done, sub->nbytes,  maxDepth);
-      usleep(1000);
       struct sendNetResources* resources = (struct sendNetResources*) (sub->connection->transportResources);
       void* mhandle = resources->mhandles[p];
       int stepSize = resources->buffSizes[p] / NCCL_STEPS;
@@ -1190,7 +1189,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
             //!todo calculate the size
            //size = sub->nbytes;
           } else {
-            sizesFifo[buffSlot];
+            size = sizesFifo[buffSlot];
           }
           bool shared = (p == NCCL_PROTO_SIMPLE) && resources->shared;
           char* buff = shared ? localBuff+resources->recvMem->offsFifo[buffSlot] : localBuff+buffSlot*stepSize;
