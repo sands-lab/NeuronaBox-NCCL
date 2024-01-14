@@ -1,4 +1,5 @@
 #include "coordinator.h"
 
-modCoordinator coordinator = {0, 0};
+// total = 4000
+modCoordinator coordinator = {0, 0, 4000};
 
