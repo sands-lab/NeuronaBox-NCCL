@@ -265,7 +265,7 @@ ncclResult_t printProxyOp(struct ncclProxyArgs* op, int poolIndex, int opIndex) 
       } else if (op->pattern == ncclPatternRingTwice) {
         status = 'N';  
       }
-      //printf(" %d%c/%d", sub->peer, status, sub->channelId);
+      printf(" %d%c/%d", sub->peer, status, sub->channelId);
     } else {
       //printf(" %d/%d", sub->peer, sub->channelId);
     }
@@ -274,6 +274,7 @@ ncclResult_t printProxyOp(struct ncclProxyArgs* op, int poolIndex, int opIndex) 
   return ncclSuccess;
 }
 ncclResult_t dumpProxyState(struct ncclProxyProgressState* state) {
+  if (DEBUG_PROXY == 0) return ncclSuccess;
   struct ncclProxyArgs* op = state->active;
   int poolIndex, opIndex;
   printf("ACTIVE OPS\n");
@@ -842,6 +843,7 @@ NCCL_PARAM(ProxyDumpSignal, "PROXY_DUMP_SIGNAL", -1);
 NCCL_PARAM(ProgressAppendOpFreq, "PROGRESS_APPENDOP_FREQ", 8);
 
 void* ncclProxyProgress(void *proxyState_) {
+  LOG_MOD(NCCL_MOD, "ncclProxyProgress");
   struct ncclProxyState* proxyState = (struct ncclProxyState*)proxyState_;
   if (setProxyThreadContext(proxyState)) {
     INFO(NCCL_INIT, "[Proxy Progress] Created CUDA context on device %d", proxyState->cudaDev);
@@ -1422,6 +1424,7 @@ static bool proxyMatchOpType(int type) {
 }
 
 void* ncclProxyService(void* _args) {
+  LOG_MOD(NCCL_MOD, "ncclProxyService(main)");
   struct ncclProxyState* proxyState =  (struct ncclProxyState*) _args;
   // if (CPU_COUNT(&comm->cpuAffinity)) sched_setaffinity(0, sizeof(cpu_set_t), &comm->cpuAffinity);
   if (setProxyThreadContext(proxyState)) {
@@ -1592,7 +1595,6 @@ ncclResult_t ncclProxyInit(struct ncclComm* comm, struct ncclSocket* sock, union
 }
 
 ncclResult_t ncclProxyCreate(struct ncclComm* comm) {
-  LOG_MOD(NCCL_MOD, "nccl (main) proxy create");
   /* proxyState is shared among parent comm and split comms. comm->proxyState->thread is
    * pthread_join()'d by commFree() in init.cc when the refCount reduces down to 0. */
   struct ncclProxyState* proxyState = comm->proxyState;
@@ -1611,7 +1613,7 @@ ncclResult_t ncclProxyCreate(struct ncclComm* comm) {
     proxyState->ncclNet = comm->ncclNet;
     proxyState->ncclCollNet = comm->ncclCollNet;
     memcpy(proxyState->buffSizes, comm->buffSizes, sizeof(comm->buffSizes));
-
+    LOG_MOD(NCCL_MOD, "nccl (main) proxy create");
     pthread_create(&comm->proxyState->thread, NULL, ncclProxyService, comm->proxyState);
     ncclSetThreadName(comm->proxyState->thread, "NCCL Service %2d", comm->cudaDev);
   }

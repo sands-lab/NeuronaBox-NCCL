@@ -14,7 +14,7 @@
 #include "include/debug.h"
 #include "include/nccl_common.h"
 #include "transport.h"
-
+#include "coordinator.h"
 #include <cstring> // std::memcpy
 #include <cinttypes> // PRIx64
 
@@ -1094,13 +1094,21 @@ ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan
     launchConfig.numAttrs = attrs;
     launchConfig.stream = launchStream;
 //! comment cudaLaunchKernelExc
-    //CUDACHECK(cudaLaunchKernelExC(&launchConfig, fn, args));
+    if (KERNEL_BYPASS) {
+      LOG_MOD(NCCL_MOD, "bypass kernel launch exc");
+    } else {
+      CUDACHECK(cudaLaunchKernelExC(&launchConfig, fn, args));
+    }
     return ncclSuccess;
   }
   #endif
   // Standard kernel launch
   //! comment cudaLaunchKernel
-  //CUDACHECK(cudaLaunchKernel(fn, grid, block, args, smem, launchStream));
+  if (KERNEL_BYPASS) {
+      LOG_MOD(NCCL_MOD, "bypass kernel launch");
+  } else {
+  CUDACHECK(cudaLaunchKernel(fn, grid, block, args, smem, launchStream));
+  }
   return ncclSuccess;
 }
 
