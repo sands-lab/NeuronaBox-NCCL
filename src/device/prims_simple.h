@@ -141,8 +141,10 @@ class Primitives<
     }
 
     if (flags & (Recv*RoleWaitRecv | Send*RoleWaitSend)) {
-      if (isSendNotRecv && (flags & SizesFifoEnabled))
+      if (isSendNotRecv && (flags & SizesFifoEnabled)) {
         connSizesFifoPtr[step%NCCL_STEPS] = nelts*sizeof(T);
+        printf("[tid=%d] WaitPeer, step=%lu, nelts=%d, sizeof<T>=%lu, coonSziesFifoPtr[%lu]=%d\n", tid, step, nelts, sizeof(T), step%NCCL_STEPS, connSizesFifoPtr[step%NCCL_STEPS]);
+      }
 
       void **ptrs = isSendNotRecv ? (ncclShmem.groups[group].dsts + Dst)
                                   : (ncclShmem.groups[group].srcs + Src);
@@ -200,10 +202,10 @@ class Primitives<
     int offset = 0;
 
     if (tid < nworkers && offset < nelem) {
-      printf("[tid=%d] DR%d DS%d R%d S%d Src%d Dst%d\n", tid, DirectRecv,
-             DirectSend, Recv, Send, Src, Dst);
+      // printf("[tid=%d] DR%d DS%d R%d S%d Src%d Dst%d\n", tid, DirectRecv,
+      //        DirectSend, Recv, Send, Src, Dst);
       //! observation:
-      // Asymtric between rank 0 and rank 1
+      //! Asymtric between rank 0 and rank 1
 // Worker-only loop for non-empty slices. Non-workers and empty slices are
 // processed in the loop following this if block. The benefit of splitting
 // the loop like this is we pull two branches out of the critical path.
@@ -271,9 +273,9 @@ class Primitives<
                 /*postOp*/ false, 1, ncclShmem.groups[group].srcs, fan.nsend(),
                 ncclShmem.groups[group].dsts + 1, workSize);
             // never entered since DR is always 0!
-            printf("[tid=%d] DirectRecv;Send nsrc=%d src=%p ndst=%d dst=%p\n",
-                   tid, 1, ncclShmem.groups[group].srcs[0], fan.nsend(),
-                   ncclShmem.groups[group].dsts[1]);
+            // printf("[tid=%d] DirectRecv;Send nsrc=%d src=%p ndst=%d dst=%p\n",
+            //        tid, 1, ncclShmem.groups[group].srcs[0], fan.nsend(),
+            //        ncclShmem.groups[group].dsts[1]);
           }
         } else if (DirectSend && !DirectRecv && SrcBuf != Input &&
                    ncclShmem.groups[group].dsts[Dst] == nullptr) {
@@ -283,12 +285,12 @@ class Primitives<
               ncclShmem.groups[group].srcs, Dst, ncclShmem.groups[group].dsts,
               workSize);
           // never entered from logs
-          printf(
-              "[tid=%d]DirectSend && !DirectRecv && SrcBuf != Input && "
-              "ncclShmem.groups[group].dsts[Dst] == nullptr\n nsrc=%d src=%p "
-              "ndst=%d dst=%p\n",
-              tid, Recv, ncclShmem.groups[group].srcs[0], Dst,
-              ncclShmem.groups[group].dsts[0]);
+          // printf(
+          //     "[tid=%d]DirectSend && !DirectRecv && SrcBuf != Input && "
+          //     "ncclShmem.groups[group].dsts[Dst] == nullptr\n nsrc=%d src=%p "
+          //     "ndst=%d dst=%p\n",
+          //     tid, Recv, ncclShmem.groups[group].srcs[0], Dst,
+          //     ncclShmem.groups[group].dsts[0]);
         } else {
           constexpr int PreOpSrcs =
               SrcBuf != Input ? 0
@@ -301,9 +303,9 @@ class Primitives<
               tid, nworkers, ncclShmem.redOpArgs[0], ncclShmem.redOpArgs,
               postOp, Recv * fan.nrecv() + Src, ncclShmem.groups[group].srcs,
               Send * fan.nsend() + Dst, ncclShmem.groups[group].dsts, workSize);
-          printf("[tid=%d] ELSE nsrc=%d src=%p ndst=%d dst=%p\n", tid,
-                 Recv * fan.nrecv() + Src, ncclShmem.groups[group].srcs[0],
-                 Recv * fan.nsend() + Dst, ncclShmem.groups[group].dsts[0]);
+          // printf("[tid=%d] ELSE nsrc=%d src=%p ndst=%d dst=%p\n", tid,
+          //        Recv * fan.nrecv() + Src, ncclShmem.groups[group].srcs[0],
+          //        Recv * fan.nsend() + Dst, ncclShmem.groups[group].dsts[0]);
         }
         barrier(); // This barrier has a counterpart in following loop
         postPeer<Recv, Send>(0 < sliceSize);

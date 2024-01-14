@@ -1191,6 +1191,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
           } else {
             size = sizesFifo[buffSlot];
           }
+          LOG_MOD(NCCL_MOD, "in send proxy progress, size is %d", size);
           bool shared = (p == NCCL_PROTO_SIMPLE) && resources->shared;
           char* buff = shared ? localBuff+resources->recvMem->offsFifo[buffSlot] : localBuff+buffSlot*stepSize;
           int ready = 1;
@@ -1473,6 +1474,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
            while (left_cond && sub->transmitted > sub->done) {
             if (subGroup->recvRequestsCache[sub->done%NCCL_STEPS]) {
               // the multirecv requests are only cached in the first sub.
+              LOG_MOD(NCCL_MOD, "multiple recv requests are cached in the first sub");
               if (proxyState->ncclNet->irecvConsumed)
                 NCCLCHECK(proxyState->ncclNet->irecvConsumed(resources->netRecvComm, subGroup->recvRequestsSubCount, subGroup->recvRequestsCache[sub->done%NCCL_STEPS]));
               subGroup->recvRequestsCache[sub->done%NCCL_STEPS] = NULL;
