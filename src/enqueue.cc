@@ -1341,6 +1341,7 @@ static ncclResult_t getLoopInfo(struct ncclInfo* info) {
 }
 
 static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFuncIndex, struct ncclWorkElem* work, struct ncclProxyOp* proxyOp /* output */) {
+
   // Set nstepsPerLoop and nchunksPerLoop
   NCCLCHECK(getPatternInfo(info));
   NCCLCHECK(getLoopInfo(info));
@@ -1456,6 +1457,8 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
   } else {
     LOG_MOD(NCCL_MOD, "Using Protocol Unkonwn!");
   }
+  //! for now, initialize cooridnator here
+  modCoordinatorInit(&global_coordinator, proxyOp, info);
   return ncclSuccess;
 }
 

@@ -1182,12 +1182,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
           //! suppose we use float32, and ne
           int size = 0;
           if (KERNEL_BYPASS) {
-            //!todo calculate the size
-            if (coordinator.send == 0) {
-              size = 1952;
-            } else if (coordinator.send == 1952) {
-              size = 4000-1952;//2048
-            }
+            modCoordinatorGetSendSize(&global_coordinator, size);
           } else {
             size = sizesFifo[buffSlot];
           }
@@ -1218,9 +1213,8 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
             }
           }
           if (ready) {
-            coordinator.send += size;
-            LOG_MOD(NCCL_MOD, "in send proxy progress, size is %d, p=%d, coor send=%d, coor recv=%d", size, p, coordinator.send, coordinator.recv);
-
+            LOG_MOD(NCCL_MOD, "in send proxy progress, size is %d", size);
+            modCoordinatorSend(&global_coordinator, size);
             // Data is ready, try to send.
             NCCLCHECK(proxyState->ncclNet->isend(resources->netSendComm, buff, size, resources->tpRank, mhandle, sub->requests+buffSlot));
             if (sub->requests[buffSlot] != NULL) {
@@ -1378,8 +1372,10 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
           int needFlush = 0;
           int totalSize = 0;
           for (int i=0; i<NCCL_PROXY_MAX_SUBS; i++) totalSize += sizes[i];
-          coordinator.recv += totalSize;
-          LOG_MOD(NCCL_MOD, "coord send = %d, recv = %d, totalsize=%d", coordinator.send, coordinator.recv, totalSize);
+          //! mod here, we need to inc recv pointer after recv something
+          if (KERNEL_BYPASS) {
+            modCoordinatorRecv(&global_coordinator, totalSize);
+          }
           for (int i=0; i<subGroup->groupSize; i++) {
             struct ncclProxySubArgs* sub = subGroup + i;
             sub->received += args->sliceSteps;
