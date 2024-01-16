@@ -33,6 +33,14 @@ namespace {
       printf("inside all reduce run_ring! nthread=%d, proto:id=%d\n", nthreads,
              Proto::Id);
     }
+    /*
+    
+      __device__ Primitives(
+      int tid, int nthreads, int const *recvPeers, int const *sendPeers,
+      void const *inputBuf, void *outputBuf, uint64_t redOpArg, uint8_t group=0,
+      uint8_t connIndexRecv = 0, uint8_t connIndexSend = 0, struct ncclWorkElem* e = nullptr, int stepSize_=0
+    )
+    */
     Primitives<T, RedOp, FanSymmetric<1>, 1, Proto, 0> prims
       (tid, nthreads, &ring->prev, &ring->next, args->sendbuff, args->recvbuff, args->redOpArg);
 
