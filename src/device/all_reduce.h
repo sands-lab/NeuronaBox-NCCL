@@ -30,8 +30,11 @@ namespace {
       minChunkSize = nthreads*(Proto::calcBytePerGrain()/sizeof(T))/2;
     }
     if (tid == 0) {
-      printf("inside all reduce run_ring! nthread=%d, proto:id=%d\n", nthreads,
-             Proto::Id);
+      printf("[tid=0] inside all reduce run_ring! nthread=%d, proto:id=%d "
+             "chunkSize=%lu, minChunkSize=%d sizeof(T)=%lu, loopsize=%lu, "
+             "bid=%d, count=%lu, ringix=%d\n",
+             nthreads, Proto::Id, chunkSize, minChunkSize, sizeof(T), loopSize,
+             bid, size, ringIx);
     }
     /*
     
@@ -53,6 +56,10 @@ namespace {
       else
         realChunkSize = min(chunkSize, divUp(size-gridOffset, nChannels*nranks*minChunkSize)*minChunkSize);
       realChunkSize = int(realChunkSize);
+
+      if (tid == 0) {
+        printf("[tid=0] realChunkSize=%lu", realChunkSize);
+      }
 
       auto calcOffset = [&]__device__(int chunk)->ssize_t {
         if (Proto::Id == NCCL_PROTO_SIMPLE)
