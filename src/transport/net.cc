@@ -1214,10 +1214,12 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
           }
           if (ready) {
             LOG_MOD(NCCL_MOD, "in send proxy progress, size is %d", size);
-            modCoordinatorSend(&global_coordinator, size);
             // Data is ready, try to send.
             NCCLCHECK(proxyState->ncclNet->isend(resources->netSendComm, buff, size, resources->tpRank, mhandle, sub->requests+buffSlot));
             if (sub->requests[buffSlot] != NULL) {
+              if (KERNEL_BYPASS) {
+                modCoordinatorSend(&global_coordinator, size);
+              }
               TRACE(NCCL_NET, "sendProxy [%ld/%d] Isend posted, req %p", sub->transmitted, buffSlot, sub->requests[buffSlot]);
               sizesFifo[buffSlot] = -1;
               // Make sure size is reset to zero before we update the head.
@@ -1368,11 +1370,14 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
         void* mhandles[NCCL_PROXY_MAX_SUBS];
         for (int i=0; i<NCCL_PROXY_MAX_SUBS; i++) sizes[i] = 0;
         NCCLCHECK(proxyState->ncclNet->test(subGroup->requests[step%NCCL_STEPS], &done, sizes));
+        LOG_MOD(NCCL_MOD, "recvProxyProgress, done is %d", done);
         if (done) {
           int needFlush = 0;
           int totalSize = 0;
           for (int i=0; i<NCCL_PROXY_MAX_SUBS; i++) totalSize += sizes[i];
           //! mod here, we need to inc recv pointer after recv something
+          LOG_MOD(NCCL_MOD, "recvProxyProgress done, totalSize is %d",
+                  totalSize);
           if (KERNEL_BYPASS) {
             modCoordinatorRecv(&global_coordinator, totalSize);
           }
@@ -1466,7 +1471,6 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
            while (left_cond && sub->transmitted > sub->done) {
             if (subGroup->recvRequestsCache[sub->done%NCCL_STEPS]) {
               // the multirecv requests are only cached in the first sub.
-              LOG_MOD(NCCL_MOD, "multiple recv requests are cached in the first sub");
               if (proxyState->ncclNet->irecvConsumed)
                 NCCLCHECK(proxyState->ncclNet->irecvConsumed(resources->netRecvComm, subGroup->recvRequestsSubCount, subGroup->recvRequestsCache[sub->done%NCCL_STEPS]));
               subGroup->recvRequestsCache[sub->done%NCCL_STEPS] = NULL;

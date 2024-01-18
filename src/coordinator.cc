@@ -73,7 +73,7 @@ static void calc_size_inkernel(int nelem, vector<int> &res) {
 
   while (slice < SlicePerChunk) {
     sliceSize = sliceSize < nelem - offset ? sliceSize : nelem - offset;
-    res.push_back(0);
+    // res.push_back(0);
     offset += sliceSize;
     slice += 1;
   }
@@ -86,7 +86,7 @@ static void calc_size(int nranks, int myrank, int count, int nchannels,
   const int chunkSize = 524288;
   int loopSize = nchannels * nranks * chunkSize;
   int size = count;
-  int ringIx = 0;
+  int ringIx = myrank;
 
   for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
     ssize_t realChunkSize;
