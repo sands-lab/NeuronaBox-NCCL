@@ -1173,17 +1173,17 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
         //! finished its work, so we need to access the coordinator to get the real tail 
         //! if (sizesFifo[buffSlot] != -1 && ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL))
         bool cond = sizesFifo[buffSlot] != -1 && ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL);
-        if (KERNEL_BYPASS || cond)
-        {
+        int size = 0;
+        if (KERNEL_BYPASS) {
+          modCoordinatorGetSendSize(&global_coordinator, size);
+        }
+        if ((KERNEL_BYPASS && size != -1) || (!KERNEL_BYPASS && cond)) {
           // We have something to receive, let's check if it's completely ready.
 
           //! we need to set the size properly, but according to kernel
           //! the size is nelts * sizeof(T)
           //! suppose we use float32, and ne
-          int size = 0;
-          if (KERNEL_BYPASS) {
-            modCoordinatorGetSendSize(&global_coordinator, size);
-          } else {
+          if (!KERNEL_BYPASS) {
             size = sizesFifo[buffSlot];
           }
           bool shared = (p == NCCL_PROTO_SIMPLE) && resources->shared;

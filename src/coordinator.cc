@@ -63,11 +63,19 @@ static void calc_size_inkernel(int nelem, vector<int> &res) {
   int StepPerSlice = 2;  //! i don't know why
   int sliceSize = stepSize * StepPerSlice;
   sliceSize = std::max(DIVUP(nelem, 16 * SlicePerChunk) * 16, sliceSize / 32);
-  int offset = 0;
+  int offset = 0, slice = 0;
   while (offset < nelem) {
     int size = sliceSize < nelem - offset ? sliceSize : nelem - offset;
     res.push_back(size);
     offset += sliceSize;
+    slice += 1;
+  }
+
+  while (slice < SlicePerChunk) {
+    sliceSize = sliceSize < nelem - offset ? sliceSize : nelem - offset;
+    res.push_back(0);
+    offset += sliceSize;
+    slice += 1;
   }
 }
 
@@ -146,7 +154,6 @@ ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp *proxyO
     int myrank = comm->rank;
     int nchannels = info->nChannels;
     int nthreads = info->nThreads;
-    count = count * (nranks - 1);
     LOG_MOD(NCCL_MOD,
             "modCoordinatorInit: count=%d, nranks=%d, myrank=%d, nchannels=%d, "
             "nthreads=%d",
@@ -154,11 +161,11 @@ ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp *proxyO
     coordinator->proxyOp = *proxyOp;
     coordinator->info = *info;
     coordinator->sendSizes = vector<int>();
-    coordinator->recvSizes = vector<int>();
     calc_size(nranks, myrank, count, nchannels, nthreads, 4,
               coordinator->sendSizes);
-    calc_size(nranks, nranks - myrank, count, nchannels, nthreads, 4,
-              coordinator->recvSizes);
+    // copy sendSizes and reverse, then we can use it as recvSizes
+    coordinator->recvSizes = vector<int>(coordinator->sendSizes);
+    std::reverse(coordinator->recvSizes.begin(), coordinator->recvSizes.end());
 
     coordinator->sendTail = 0;
     coordinator->recvTail = 0;
@@ -172,17 +179,34 @@ ncclResult_t modCoordinatorDestroy(modCoordinator *coordinator) {
 }
 
 ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int &size) {
-    size = 4000;
+  if (coordinator->sendTail <= coordinator->recvTail) {
+    size = coordinator->sendSizes[coordinator->sendTail];
+  } else {
+    size = -1;
+    LOG_MOD(NCCL_MOD, "sendTail exceeds recvTail");
+  }
     LOG_MOD(NCCL_MOD, "modCoordinatorGetSendSize: size=%d", size);
     return ncclSuccess;
 }
 
 ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int size) {
-    LOG_MOD(NCCL_MOD, "modCoordinatorSend: size=%d", size);
-    return ncclSuccess;
+  if (coordinator->sendSizes[coordinator->sendTail] == size) {
+    coordinator->sendTail++;
+  } else {
+    LOG_MOD(NCCL_MOD, "send size unmatch actual: %d != expected: %d", size,
+            coordinator->sendSizes[coordinator->sendTail]);
+  }
+  LOG_MOD(NCCL_MOD, "modCoordinatorSend: size=%d", size);
+  return ncclSuccess;
 }
 
 ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int size) {
-    LOG_MOD(NCCL_MOD, "modCoordinatorRecv: size=%d", size);
-    return ncclSuccess;
+  if (coordinator->recvSizes[coordinator->recvTail] == size) {
+    coordinator->recvTail++;
+  } else {
+    LOG_MOD(NCCL_MOD, "recv size unmatch actual: %d != expected: %d", size,
+            coordinator->recvSizes[coordinator->recvTail]);
+  }
+  LOG_MOD(NCCL_MOD, "modCoordinatorRecv: size=%d", size);
+  return ncclSuccess;
 }
