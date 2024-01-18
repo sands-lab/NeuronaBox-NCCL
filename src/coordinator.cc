@@ -73,7 +73,7 @@ static void calc_size_inkernel(int nelem, vector<int> &res) {
 
   while (slice < SlicePerChunk) {
     sliceSize = sliceSize < nelem - offset ? sliceSize : nelem - offset;
-    // res.push_back(0);
+    res.push_back(0);
     offset += sliceSize;
     slice += 1;
   }
@@ -164,9 +164,14 @@ ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp *proxyO
     calc_size(nranks, myrank, count, nchannels, nthreads, 4,
               coordinator->sendSizes);
     // copy sendSizes and reverse, then we can use it as recvSizes
-    coordinator->recvSizes = vector<int>(coordinator->sendSizes);
-    std::reverse(coordinator->recvSizes.begin(), coordinator->recvSizes.end());
-
+    calc_size(nranks, 1 - myrank, count, nchannels, nthreads, 4,
+              coordinator->recvSizes);
+    for (auto &i : coordinator->recvSizes) {
+      i *= sizeof(float);
+    }
+    for (auto &i : coordinator->sendSizes) {
+      i *= sizeof(float);
+    }
     coordinator->sendTail = 0;
     coordinator->recvTail = 0;
     LOG_MOD(NCCL_MOD, "modCoordinatorInit");
