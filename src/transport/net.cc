@@ -1254,12 +1254,17 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
           if (sub->done == sub->nsteps) {
             resources->step = sub->base + sub->nsteps;
             args->done++;
+            LOG_MOD(NCCL_MOD,
+                    "send proxy progress, args->done = %d, args->nsubs = %d\n",
+                    args->done, args->nsubs);
           }
         }
       }
     }
     if (args->done == args->nsubs) {
       args->state = ncclProxyOpNone;
+      LOG_MOD(NCCL_MOD, "op done, args->done = %d, args->nsubs = %d\n",
+              args->done, args->nsubs);
     }
   }
   return ncclSuccess;
@@ -1485,6 +1490,10 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
               struct recvNetResources* resources = (struct recvNetResources*) (sub->connection->transportResources);
               resources->step = sub->base + sub->nsteps;
               args->done++;
+              LOG_MOD(
+                  NCCL_MOD,
+                  "recv proxy progress, args->done = %d, args->nsubs = %d\n",
+                  args->done, args->nsubs);
               break;
             }
           }
@@ -1493,6 +1502,9 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
     }
     if (args->done == args->nsubs) {
       args->state = ncclProxyOpNone;
+      LOG_MOD(NCCL_MOD,
+              "recv proxy progress done, args->done = %d, args->nsubs = %d\n",
+              args->done, args->nsubs);
     }
   }
   return ncclSuccess;

@@ -176,6 +176,7 @@ ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp *proxyO
             KERNEL_BYPASS, count, nranks, myrank, nchannels, nthreads);
     coordinator->proxyOp = *proxyOp;
     coordinator->info = *info;
+    coordinator->channels.clear();
     for (int i = 0; i < nchannels; ++i) {
       modChannelInfo ch;
       ch.bid = i;

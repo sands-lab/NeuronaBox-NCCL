@@ -179,6 +179,7 @@ static ncclResult_t doLaunches(struct ncclComm* head) {
     }
     cliqueHead = cliqueNextHead;
   } while (cliqueHead != nullptr);
+  LOG_MOD(NCCL_MOD, "do launches finished!");
 failure:
   return result;
 }
@@ -361,7 +362,7 @@ static ncclResult_t groupLaunch(struct ncclAsyncJob *job_) {
   }
 
   CUDACHECK(cudaSetDevice(savedDev));
-  LOG_MOD(NCCL_MOD, "before exit");
+  LOG_MOD(NCCL_MOD, "group launch before exit");
 exit:
   return ret;
 fail:

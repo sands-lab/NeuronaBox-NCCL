@@ -1129,6 +1129,7 @@ ncclResult_t ncclLaunchKernelAfter_NoCuda(struct ncclComm* comm, struct ncclKern
 }
 
 ncclResult_t ncclLaunchFinish(struct ncclComm* comm) {
+  LOG_MOD(NCCL_MOD, "nccl launchfinish enter");
   ncclResult_t result = ncclSuccess;
   struct ncclTasks* tasks = &comm->tasks;
   tasks->collBytesTotal = 0; // Just in case subtraction during scheduleCollTasksToPlan() doesn't get to 0
@@ -1161,6 +1162,7 @@ ncclResult_t ncclLaunchFinish(struct ncclComm* comm) {
     NCCLCHECKGOTO(ncclStrongStreamRelease(tasks->capturingGraph, &comm->sharedRes->deviceStream), result, resume3);
   resume3:;
   }
+  LOG_MOD(NCCL_MOD, "nccl launchfinish exit");
   return result;
 }
 
