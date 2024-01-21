@@ -4,10 +4,12 @@
 #include <assert.h>
 #include <cinttypes>
 #include <math.h>
+#include <stdlib.h>
+#include <string>
 using namespace std;
 // total = 4000
 modCoordinator global_coordinator;
-
+int KERNEL_BYPASS = 0;
 /*
 
 template<typename X, typename Y, typename Z = decltype(X()+Y())>
@@ -56,6 +58,15 @@ int(realChunkSize); nelem = min(realChunkSize, size-offset);
 
 */
 
+static int getKernelBypass() {
+  char *env = getenv("NCCL_KERNEL_BYPASS");
+  if (env == NULL) {
+    return 0;
+  }
+  KERNEL_BYPASS = atoi(env);
+  return KERNEL_BYPASS;
+}
+
 static void calc_size_inkernel(int nelem, vector<int> &res) {
   LOG_MOD(NCCL_MOD, "calc_size_inkernel: nelem=%d", nelem);
   int stepSize = 524288; // DEFAULT_BUFFSIZE(simple) / NCCL_STEP
@@ -80,10 +91,11 @@ static void calc_size_inkernel(int nelem, vector<int> &res) {
 }
 
 static void calc_size(int nranks, int myrank, int count, int nchannels,
-                      int nthreads, int tsize, vector<int> &res) {
+                      int mychannel, int nthreads, int tsize,
+                      vector<int> &res) {
   assert(nranks == 2);
-  int bid = 0;
   const int chunkSize = 524288;
+  int bid = mychannel;
   int loopSize = nchannels * nranks * chunkSize;
   int size = count;
   int ringIx = myrank;
@@ -140,11 +152,12 @@ static void calc_size(int nranks, int myrank, int count, int nchannels,
       calc_size_inkernel(nelem, res);
     }
   }
-
-  LOG_MOD(NCCL_MOD, "Calculated size for rank %d:", myrank);
+  std::string szs;
   for (int i = 0; i < res.size(); i++) {
-    LOG_MOD(NCCL_MOD, "size[%d]=%d", i, res[i]);
+    szs = szs + " " + std::to_string(res[i]);
+    res[i] *= tsize;
   }
+  LOG_MOD(NCCL_MOD, "Sizes for rank %d: %s", myrank, szs.c_str());
 }
 
 ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp *proxyOp, ncclInfo *info) {
@@ -154,26 +167,26 @@ ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp *proxyO
     int myrank = comm->rank;
     int nchannels = info->nChannels;
     int nthreads = info->nThreads;
+    int tsize = sizeof(float);
+    getKernelBypass();
     LOG_MOD(NCCL_MOD,
-            "modCoordinatorInit: count=%d, nranks=%d, myrank=%d, nchannels=%d, "
+            "modCoordinatorInit: K_BYPASS=%d, count=%d, nranks=%d, myrank=%d, "
+            "nchannels=%d, "
             "nthreads=%d",
-            count, nranks, myrank, nchannels, nthreads);
+            KERNEL_BYPASS, count, nranks, myrank, nchannels, nthreads);
     coordinator->proxyOp = *proxyOp;
     coordinator->info = *info;
-    coordinator->sendSizes = vector<int>();
-    calc_size(nranks, myrank, count, nchannels, nthreads, 4,
-              coordinator->sendSizes);
-    // copy sendSizes and reverse, then we can use it as recvSizes
-    calc_size(nranks, 1 - myrank, count, nchannels, nthreads, 4,
-              coordinator->recvSizes);
-    for (auto &i : coordinator->recvSizes) {
-      i *= sizeof(float);
+    for (int i = 0; i < nchannels; ++i) {
+      modChannelInfo ch;
+      ch.bid = i;
+      calc_size(nranks, myrank, count, nchannels, i, nthreads, tsize,
+                ch.sendSizes);
+      calc_size(nranks, 1 - myrank, count, nchannels, i, nthreads, tsize,
+                ch.recvSizes);
+      ch.sendTail = 0;
+      ch.recvTail = 0;
+      coordinator->channels.push_back(ch);
     }
-    for (auto &i : coordinator->sendSizes) {
-      i *= sizeof(float);
-    }
-    coordinator->sendTail = 0;
-    coordinator->recvTail = 0;
     LOG_MOD(NCCL_MOD, "modCoordinatorInit");
     return ncclSuccess;
 }
@@ -183,9 +196,11 @@ ncclResult_t modCoordinatorDestroy(modCoordinator *coordinator) {
     return ncclSuccess;
 }
 
-ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int &size) {
-  if (coordinator->sendTail <= coordinator->recvTail) {
-    size = coordinator->sendSizes[coordinator->sendTail];
+ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int cid,
+                                       int &size) {
+  auto &ch = coordinator->channels[cid];
+  if (ch.sendTail <= ch.recvTail) {
+    size = ch.sendSizes[ch.sendTail];
   } else {
     size = -1;
     LOG_MOD(NCCL_MOD, "sendTail exceeds recvTail");
@@ -194,23 +209,27 @@ ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int &size) {
     return ncclSuccess;
 }
 
-ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int size) {
-  if (coordinator->sendSizes[coordinator->sendTail] == size) {
-    coordinator->sendTail++;
+ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int cid,
+                                int size) {
+  auto &ch = coordinator->channels[cid];
+  if (ch.sendSizes[ch.sendTail] == size) {
+    ch.sendTail++;
   } else {
     LOG_MOD(NCCL_MOD, "send size unmatch actual: %d != expected: %d", size,
-            coordinator->sendSizes[coordinator->sendTail]);
+            ch.sendSizes[ch.sendTail]);
   }
   LOG_MOD(NCCL_MOD, "modCoordinatorSend: size=%d", size);
   return ncclSuccess;
 }
 
-ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int size) {
-  if (coordinator->recvSizes[coordinator->recvTail] == size) {
-    coordinator->recvTail++;
+ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid,
+                                int size) {
+  auto &ch = coordinator->channels[cid];
+  if (ch.recvSizes[ch.recvTail] == size) {
+    ch.recvTail++;
   } else {
     LOG_MOD(NCCL_MOD, "recv size unmatch actual: %d != expected: %d", size,
-            coordinator->recvSizes[coordinator->recvTail]);
+            ch.recvSizes[ch.recvTail]);
   }
   LOG_MOD(NCCL_MOD, "modCoordinatorRecv: size=%d", size);
   return ncclSuccess;

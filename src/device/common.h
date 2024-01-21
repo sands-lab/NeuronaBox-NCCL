@@ -9,9 +9,9 @@
 
 #include "collectives.h"
 #include "device.h"
-#include "op128.h"
 #include "network/unpack/unpack_defs.h"
-
+#include "op128.h"
+#include <stdio.h>
 #define COLL_UNROLL (ncclCollUnroll())
 
 typedef void(*ncclDevFuncPtr_t)();
@@ -190,8 +190,15 @@ __device__ void ncclKernelMain(struct ncclDevComm* comm, uint64_t channelMask, s
     __syncthreads();
 
     if (0 <= SpecializedFnId && ncclShmem.work.header.funcIndex == (unsigned)SpecializedFnId) {
+      if (tid == 0) {
+        printf("Using specialized kernel\n");
+      }
       SpecializedRunWork().run(&ncclShmem.work);
     } else {
+      if (tid == 0) {
+        printf("Using generic kernel id = %d\n",
+               ncclShmem.work.header.funcIndex);
+      }
       ncclDevFuncTable[ncclShmem.work.header.funcIndex]();
     }
 

@@ -1129,8 +1129,11 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
     for (int s=0; s<args->nsubs; s++) {
       struct ncclProxySubArgs* sub = args->subs+s;
       if (sub->done == sub->nsteps) continue;
-      LOG_MOD(NCCL_MOD, "base%lu, posted%lu, transmitted%lu, done%lu, nbytes%lu, maxDepth%d\n",
-              sub->base, sub->posted, sub->transmitted, sub->done, sub->nbytes,  maxDepth);
+      LOG_MOD(NCCL_MOD,
+              "base%lu, posted%lu, transmitted%lu, done%lu, nbytes%lu, "
+              "maxDepth%d, chid=%d\n",
+              sub->base, sub->posted, sub->transmitted, sub->done, sub->nbytes,
+              maxDepth, sub->channelId);
       struct sendNetResources* resources = (struct sendNetResources*) (sub->connection->transportResources);
       void* mhandle = resources->mhandles[p];
       int stepSize = resources->buffSizes[p] / NCCL_STEPS;
@@ -1175,7 +1178,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
         bool cond = sizesFifo[buffSlot] != -1 && ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL);
         int size = 0;
         if (KERNEL_BYPASS) {
-          modCoordinatorGetSendSize(&global_coordinator, size);
+          modCoordinatorGetSendSize(&global_coordinator, sub->channelId, size);
         }
         if ((KERNEL_BYPASS && size != -1) || (!KERNEL_BYPASS && cond)) {
           // We have something to receive, let's check if it's completely ready.
@@ -1218,7 +1221,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
             NCCLCHECK(proxyState->ncclNet->isend(resources->netSendComm, buff, size, resources->tpRank, mhandle, sub->requests+buffSlot));
             if (sub->requests[buffSlot] != NULL) {
               if (KERNEL_BYPASS) {
-                modCoordinatorSend(&global_coordinator, size);
+                modCoordinatorSend(&global_coordinator, sub->channelId, size);
               }
               TRACE(NCCL_NET, "sendProxy [%ld/%d] Isend posted, req %p", sub->transmitted, buffSlot, sub->requests[buffSlot]);
               sizesFifo[buffSlot] = -1;
@@ -1378,11 +1381,11 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
           //! mod here, we need to inc recv pointer after recv something
           LOG_MOD(NCCL_MOD, "recvProxyProgress done, totalSize is %d",
                   totalSize);
-          if (KERNEL_BYPASS) {
-            modCoordinatorRecv(&global_coordinator, totalSize);
-          }
-          for (int i=0; i<subGroup->groupSize; i++) {
-            struct ncclProxySubArgs* sub = subGroup + i;
+          for (int i = 0; i < subGroup->groupSize; i++) {
+            struct ncclProxySubArgs *sub = subGroup + i;
+            if (KERNEL_BYPASS) {
+              modCoordinatorRecv(&global_coordinator, sub->channelId, sizes[i]);
+            }
             sub->received += args->sliceSteps;
             for (uint64_t step=sub->received-args->sliceSteps; step<sub->received; step++) ncclProfilingRecord(args, s+i, step, ncclProxyProfileRecvFlushWait);
             if (step < sub->nsteps) {

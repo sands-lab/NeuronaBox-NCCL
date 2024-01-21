@@ -4,15 +4,21 @@
 #include "nccl.h"
 #include "proxy.h"
 #include <vector>
-const int KERNEL_BYPASS = 1;
+
+extern int KERNEL_BYPASS;
+
+struct modChannelInfo {
+  int bid;
+  std::vector<int> sendSizes;
+  std::vector<int> recvSizes;
+  int sendTail;
+  int recvTail;
+};
 
 struct modCoordinator {
-    ncclProxyOp proxyOp;
-    ncclInfo info;
-    std::vector<int> sendSizes;
-    std::vector<int> recvSizes;
-    int sendTail;
-    int recvTail;
+  ncclProxyOp proxyOp;
+  ncclInfo info;
+  std::vector<modChannelInfo> channels;
 };
 
 extern modCoordinator global_coordinator;
@@ -21,10 +27,11 @@ ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp* proxyO
 
 ncclResult_t modCoordinatorDestroy(modCoordinator *coordinator);
 
-ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int &size);
+ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int cid,
+                                       int &size);
 
-ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int size);
+ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int cid, int size);
 
-ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int size);
+ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid, int size);
 
 #endif

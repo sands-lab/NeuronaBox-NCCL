@@ -143,7 +143,10 @@ class Primitives<
     if (flags & (Recv*RoleWaitRecv | Send*RoleWaitSend)) {
       if (isSendNotRecv && (flags & SizesFifoEnabled)) {
         connSizesFifoPtr[step%NCCL_STEPS] = nelts*sizeof(T);
-        printf("[tid=%d] WaitPeer, step=%lu, nelts=%d, sizeof<T>=%lu, coonSziesFifoPtr[%lu]=%d\n", tid, step, nelts, sizeof(T), step%NCCL_STEPS, connSizesFifoPtr[step%NCCL_STEPS]);
+        printf("[tid=%d] WaitPeer, step=%lu, offset=%d, nelts=%d, "
+               "sizeof<T>=%lu, coonSziesFifoPtr[%lu]=%d\n",
+               tid, step, offset, nelts, sizeof(T), step % NCCL_STEPS,
+               connSizesFifoPtr[step % NCCL_STEPS]);
       }
 
       void **ptrs = isSendNotRecv ? (ncclShmem.groups[group].dsts + Dst)
