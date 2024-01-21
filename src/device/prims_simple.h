@@ -525,8 +525,9 @@ class Primitives<
     stepSize(stepSize_ == 0 ? ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE]/NCCL_STEPS/sizeof(T) : stepSize_) {
     if (tid == 0) {
       printf("At primitives init: nthreads=%d, tid=%d, tidInBlk=%d, group=%d, "
-             "stepsize=%d\n",
-             nthreads, tid, tidInBlock, group, stepSize);
+             "stepsize_=%d, bufsize=%d, ncclstep=%d\n",
+             nthreads, tid, tidInBlock, group, stepSize_,
+             ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE], NCCL_STEPS);
     }
     // For send operations, we need an extra warp to overlap the threadfence and the copy
     this->nworkers = nthreads - (MaxSend > 0 && nthreads-WARP_SIZE >= 64 ? WARP_SIZE : 0);

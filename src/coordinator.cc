@@ -69,7 +69,7 @@ static int getKernelBypass() {
 
 static void calc_size_inkernel(int nelem, vector<int> &res) {
   LOG_MOD(NCCL_MOD, "calc_size_inkernel: nelem=%d", nelem);
-  int stepSize = 524288; // DEFAULT_BUFFSIZE(simple) / NCCL_STEP
+  int stepSize = 131072; // DEFAULT_BUFFSIZE(simple) / NCCL_STEP / sizeof(float)
   int SlicePerChunk = 2; // all reduce
   int StepPerSlice = 2;  //! i don't know why
   int sliceSize = stepSize * StepPerSlice;
@@ -157,7 +157,7 @@ static void calc_size(int nranks, int myrank, int count, int nchannels,
     szs = szs + " " + std::to_string(res[i]);
     res[i] *= tsize;
   }
-  LOG_MOD(NCCL_MOD, "Sizes for rank %d: %s", myrank, szs.c_str());
+  LOG_MOD(NCCL_MOD, "Calculated sizes for rank %d: %s", myrank, szs.c_str());
 }
 
 ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp *proxyOp, ncclInfo *info) {
