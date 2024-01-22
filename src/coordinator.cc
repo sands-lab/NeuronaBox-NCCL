@@ -160,6 +160,28 @@ static void calc_size(int nranks, int myrank, int count, int nchannels,
   LOG_MOD(NCCL_MOD, "Calculated sizes for rank %d: %s", myrank, szs.c_str());
 }
 
+static int check_done_ch(modChannelInfo &ch) {
+  if (ch.sendTail == ch.sendSizes.size() &&
+      ch.recvTail == ch.recvSizes.size()) {
+    return 1;
+  }
+  return 0;
+}
+
+static void check_done(modCoordinator *coordinator) {
+  if (coordinator->done) {
+    return;
+  }
+  int done = 1;
+  for (int i = 0; i < coordinator->channels.size(); ++i) {
+    done = done & check_done_ch(coordinator->channels[i]);
+  }
+  if (done) {
+    coordinator->done = 1;
+    LOG_MOD(NCCL_MOD, "coordinator update check_done: done");
+  }
+}
+
 ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp *proxyOp, ncclInfo *info) {
     int count = info->count;
     ncclComm *comm = info->comm;
@@ -174,6 +196,7 @@ ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp *proxyO
             "nchannels=%d, "
             "nthreads=%d",
             KERNEL_BYPASS, count, nranks, myrank, nchannels, nthreads);
+    coordinator->done = 0;
     coordinator->proxyOp = *proxyOp;
     coordinator->info = *info;
     coordinator->channels.clear();
@@ -233,5 +256,17 @@ ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid,
             ch.recvSizes[ch.recvTail]);
   }
   LOG_MOD(NCCL_MOD, "modCoordinatorRecv: size=%d", size);
+  return ncclSuccess;
+}
+
+NCCL_API(ncclResult_t, ncclModSync, ncclComm_t comm, cudaStream_t stream);
+
+ncclResult_t ncclModSync(ncclComm_t comm, cudaStream_t stream) {
+  if (KERNEL_BYPASS) {
+    LOG_MOD(NCCL_MOD, "ncclModSync");
+    while (global_coordinator.done == 0) {
+      check_done(&global_coordinator);
+    }
+  }
   return ncclSuccess;
 }

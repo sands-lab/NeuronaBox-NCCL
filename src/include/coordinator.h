@@ -16,6 +16,7 @@ struct modChannelInfo {
 };
 
 struct modCoordinator {
+  int done;
   ncclProxyOp proxyOp;
   ncclInfo info;
   std::vector<modChannelInfo> channels;
