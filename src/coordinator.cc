@@ -3,13 +3,14 @@
 #include "comm.h"
 #include <assert.h>
 #include <cinttypes>
+#include <map>
 #include <math.h>
 #include <stdlib.h>
 #include <string>
 using namespace std;
 // total = 4000
 modCoordinator global_coordinator;
-int KERNEL_BYPASS = 0;
+int KERNEL_BYPASS = -1;
 /*
 
 template<typename X, typename Y, typename Z = decltype(X()+Y())>
@@ -59,6 +60,9 @@ int(realChunkSize); nelem = min(realChunkSize, size-offset);
 */
 
 static int getKernelBypass() {
+  if (KERNEL_BYPASS != -1) {
+    return KERNEL_BYPASS;
+  }
   char *env = getenv("NCCL_KERNEL_BYPASS");
   if (env == NULL) {
     return 0;
@@ -90,10 +94,10 @@ static void calc_size_inkernel(int nelem, vector<int> &res) {
   }
 }
 
-static void calc_size(int nranks, int myrank, int count, int nchannels,
-                      int mychannel, int nthreads, int tsize,
-                      vector<int> &res) {
-  assert(nranks == 2);
+static void calc_sendsize_channel(int nranks, int myrank, int count,
+                                  int nchannels, int mychannel, int nthreads,
+                                  int tsize, vector<int> &res) {
+  // assert(nranks == 2);
   const int chunkSize = 524288;
   int bid = mychannel;
   int loopSize = nchannels * nranks * chunkSize;
@@ -160,6 +164,10 @@ static void calc_size(int nranks, int myrank, int count, int nchannels,
   LOG_MOD(NCCL_MOD, "Calculated sizes for rank %d: %s", myrank, szs.c_str());
 }
 
+static void calc_recvsize_channel(int nranks, int myrank, int count,
+                                  int nchannels, int mychannel, int nthreads,
+                                  int tsize, vector<int> &res) {}
+
 static int check_done_ch(modChannelInfo &ch) {
   if (ch.sendTail == ch.sendSizes.size() &&
       ch.recvTail == ch.recvSizes.size()) {
@@ -168,13 +176,27 @@ static int check_done_ch(modChannelInfo &ch) {
   return 0;
 }
 
+static int check_done_rank(modRankInfo &rank) {
+  if (rank.done) {
+    return 1;
+  }
+  int done = 1;
+  for (int i = 0; i < rank.channels.size(); ++i) {
+    done = done & check_done_ch(rank.channels[i]);
+  }
+  rank.done = 1;
+  LOG_MOD(NCCL_MOD, "rank update check_done_rank: done=%d, rank=%d", done,
+          rank.myrank);
+  return done;
+}
+
 static void check_done(modCoordinator *coordinator) {
   if (coordinator->done) {
     return;
   }
   int done = 1;
-  for (int i = 0; i < coordinator->channels.size(); ++i) {
-    done = done & check_done_ch(coordinator->channels[i]);
+  for (int i = 0; i < coordinator->ranks.size(); ++i) {
+    done = done & check_done_rank(coordinator->ranks[i]);
   }
   if (done) {
     coordinator->done = 1;
@@ -182,37 +204,88 @@ static void check_done(modCoordinator *coordinator) {
   }
 }
 
-ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp *proxyOp, ncclInfo *info) {
-    int count = info->count;
-    ncclComm *comm = info->comm;
-    int nranks = comm->nRanks;
-    int myrank = comm->rank;
-    int nchannels = info->nChannels;
-    int nthreads = info->nThreads;
-    int tsize = sizeof(float);
-    getKernelBypass();
-    LOG_MOD(NCCL_MOD,
-            "modCoordinatorInit: K_BYPASS=%d, count=%d, nranks=%d, myrank=%d, "
-            "nchannels=%d, "
-            "nthreads=%d",
-            KERNEL_BYPASS, count, nranks, myrank, nchannels, nthreads);
+static void rankInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
+                     ncclInfo *info) {
+  modRankInfo &rankinfo = coordinator->ranks[info->comm->rank];
+  rankinfo.myrank = info->comm->rank;
+  if (rankinfo.myrank % 2 == 0) {
+    rankinfo.recv = 1;
+    rankinfo.send = 0;
+  } else {
+    rankinfo.recv = 0;
+    rankinfo.send = 1;
+  }
+  rankinfo.channels = vector<modChannelInfo>();
+  for (int i = 0; i < info->nChannels; ++i) {
+    modChannelInfo ch;
+    ch.bid = i;
+    ch.sendSizes = vector<int>();
+    ch.recvSizes = vector<int>();
+    if (rankinfo.send) {
+      calc_sendsize_channel(info->comm->nRanks, rankinfo.myrank, info->count,
+                            info->nChannels, i, info->nThreads, sizeof(float),
+                            ch.sendSizes);
+    }
+    if (rankinfo.recv) {
+      calc_recvsize_channel(info->comm->nRanks, 1 - rankinfo.myrank,
+                            info->count, info->nChannels, i, info->nThreads,
+                            sizeof(float), ch.recvSizes);
+    }
+    ch.sendTail = 0;
+    ch.recvTail = 0;
+    rankinfo.channels.push_back(ch);
+  }
+}
+
+static void metaInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
+                     ncclInfo *info) {
+  if (!coordinator->init) {
+    coordinator->init = 1;
     coordinator->done = 0;
     coordinator->proxyOp = *proxyOp;
     coordinator->info = *info;
-    coordinator->channels.clear();
-    for (int i = 0; i < nchannels; ++i) {
-      modChannelInfo ch;
-      ch.bid = i;
-      calc_size(nranks, myrank, count, nchannels, i, nthreads, tsize,
-                ch.sendSizes);
-      calc_size(nranks, 1 - myrank, count, nchannels, i, nthreads, tsize,
-                ch.recvSizes);
-      ch.sendTail = 0;
-      ch.recvTail = 0;
-      coordinator->channels.push_back(ch);
-    }
-    LOG_MOD(NCCL_MOD, "modCoordinatorInit");
-    return ncclSuccess;
+
+    modTaskInfo task;
+    task.count = info->count;
+    task.tsize = sizeof(float);
+    task.primitive = 0;
+    task.reduceOp = 0;
+    task.algo = 0;
+
+    modCommInfo comm;
+    comm.nranks = info->comm->nRanks;
+    comm.nnodes = atoi(getenv("N_MPI_RANKS")); // should be set by application!
+    comm.mynode = atoi(getenv("MY_MPI_RANK")); // should be set by application!
+    comm.nrankpernode = comm.nranks / comm.nnodes;
+    assert(comm.nranks % comm.nnodes == 0);
+
+    coordinator->comm = comm;
+    coordinator->task = task;
+    coordinator->ranks = map<int, modRankInfo>();
+    LOG_MOD(
+        NCCL_MOD,
+        "comm.nranks=%d, comm.nnodes=%d, comm.mynode=%d, comm.nrankpernode=%d",
+        comm.nranks, comm.nnodes, comm.mynode, comm.nrankpernode);
+  }
+}
+
+ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp *proxyOp, ncclInfo *info) {
+  getKernelBypass();
+  metaInit(coordinator, proxyOp, info);
+  int count = coordinator->task.count;
+  assert(count == info->count);
+  ncclComm *comm = info->comm;
+  int nranks = comm->nRanks;
+  int myrank = comm->rank;
+  int nchannels = info->nChannels;
+  int nthreads = info->nThreads;
+  LOG_MOD(NCCL_MOD,
+          "modCoordinatorInit: kbypass=%d, count=%d, nranks=%d, myrank=%d, "
+          "nchannels=%d, "
+          "nthreads=%d",
+          KERNEL_BYPASS, count, nranks, myrank, nchannels, nthreads);
+   rankInit(coordinator, proxyOp, info);
+   return ncclSuccess;
 }
 
 ncclResult_t modCoordinatorDestroy(modCoordinator *coordinator) {
@@ -220,9 +293,9 @@ ncclResult_t modCoordinatorDestroy(modCoordinator *coordinator) {
     return ncclSuccess;
 }
 
-ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int cid,
-                                       int &size) {
-  auto &ch = coordinator->channels[cid];
+ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int myrank,
+                                       int cid, int &size) {
+  auto &ch = coordinator->ranks[myrank].channels[cid];
   if (ch.sendTail <= ch.recvTail) {
     size = ch.sendSizes[ch.sendTail];
   } else {
@@ -233,9 +306,9 @@ ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int cid,
     return ncclSuccess;
 }
 
-ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int cid,
-                                int size) {
-  auto &ch = coordinator->channels[cid];
+ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int myrank,
+                                int cid, int size) {
+  auto &ch = coordinator->ranks[myrank].channels[cid];
   if (ch.sendSizes[ch.sendTail] == size) {
     ch.sendTail++;
   } else {
@@ -246,9 +319,9 @@ ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int cid,
   return ncclSuccess;
 }
 
-ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid,
-                                int size) {
-  auto &ch = coordinator->channels[cid];
+ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int myrank,
+                                int cid, int size) {
+  auto &ch = coordinator->ranks[myrank].channels[cid];
   if (ch.recvSizes[ch.recvTail] == size) {
     ch.recvTail++;
   } else {
@@ -265,6 +338,7 @@ ncclResult_t ncclModSync(ncclComm_t comm, cudaStream_t stream) {
   if (KERNEL_BYPASS) {
     LOG_MOD(NCCL_MOD, "ncclModSync");
     while (global_coordinator.done == 0) {
+      sched_yield();
       check_done(&global_coordinator);
     }
   }
