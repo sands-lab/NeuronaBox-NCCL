@@ -46,6 +46,8 @@ struct modTaskInfo {
 struct modCoordinator {
   int done;
   int init;
+  int sendrank;
+  int recvrank;
   modCommInfo comm;
   modTaskInfo task;
   std::map<int, modRankInfo> ranks;
@@ -60,13 +62,11 @@ ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp* proxyO
 
 ncclResult_t modCoordinatorDestroy(modCoordinator *coordinator);
 
-ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int myrank,
-                                       int cid, int &size);
+ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int cid,
+                                       int &size);
 
-ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int myrank,
-                                int cid, int size);
+ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int cid, int size);
 
-ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int myrank,
-                                int cid, int size);
+ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid, int size);
 
 #endif

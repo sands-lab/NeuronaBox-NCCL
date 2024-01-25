@@ -211,9 +211,13 @@ static void rankInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
   if (rankinfo.myrank % 2 == 0) {
     rankinfo.recv = 1;
     rankinfo.send = 0;
+    assert(coordinator->recvrank == -1);
+    coordinator->recvrank = rankinfo.myrank;
   } else {
     rankinfo.recv = 0;
     rankinfo.send = 1;
+    assert(coordinator->sendrank == -1);
+    coordinator->sendrank = rankinfo.myrank;
   }
   rankinfo.channels = vector<modChannelInfo>();
   for (int i = 0; i < info->nChannels; ++i) {
@@ -242,6 +246,9 @@ static void metaInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
   if (!coordinator->init) {
     coordinator->init = 1;
     coordinator->done = 0;
+    coordinator->sendrank = -1;
+    coordinator->recvrank = -1;
+
     coordinator->proxyOp = *proxyOp;
     coordinator->info = *info;
 
@@ -293,9 +300,9 @@ ncclResult_t modCoordinatorDestroy(modCoordinator *coordinator) {
     return ncclSuccess;
 }
 
-ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int myrank,
-                                       int cid, int &size) {
-  auto &ch = coordinator->ranks[myrank].channels[cid];
+ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int cid,
+                                       int &size) {
+  auto &ch = coordinator->ranks[coordinator->sendrank].channels[cid];
   if (ch.sendTail <= ch.recvTail) {
     size = ch.sendSizes[ch.sendTail];
   } else {
@@ -306,9 +313,9 @@ ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int myrank,
     return ncclSuccess;
 }
 
-ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int myrank,
-                                int cid, int size) {
-  auto &ch = coordinator->ranks[myrank].channels[cid];
+ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int cid,
+                                int size) {
+  auto &ch = coordinator->ranks[coordinator->sendrank].channels[cid];
   if (ch.sendSizes[ch.sendTail] == size) {
     ch.sendTail++;
   } else {
@@ -319,9 +326,9 @@ ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int myrank,
   return ncclSuccess;
 }
 
-ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int myrank,
-                                int cid, int size) {
-  auto &ch = coordinator->ranks[myrank].channels[cid];
+ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid,
+                                int size) {
+  auto &ch = coordinator->ranks[coordinator->recvrank].channels[cid];
   if (ch.recvSizes[ch.recvTail] == size) {
     ch.recvTail++;
   } else {
