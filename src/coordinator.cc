@@ -9,7 +9,15 @@
 #include <string>
 using namespace std;
 // total = 4000
-modCoordinator global_coordinator;
+modCoordinator global_coordinator = {0,
+                                     0,
+                                     -1,
+                                     -1,
+                                     modCommInfo{0, 0, 0, 0},
+                                     modTaskInfo{0, 0, 0, 0, 0, 0},
+                                     std::map<int, modRankInfo>(),
+                                     nullptr,
+                                     nullptr};
 int KERNEL_BYPASS = -1;
 /*
 
@@ -60,14 +68,16 @@ int(realChunkSize); nelem = min(realChunkSize, size-offset);
 */
 
 static int getKernelBypass() {
+  LOG_MOD(NCCL_MOD, "getKernelBypass called");
   if (KERNEL_BYPASS != -1) {
     return KERNEL_BYPASS;
   }
   char *env = getenv("NCCL_KERNEL_BYPASS");
   if (env == NULL) {
-    return 0;
+    KERNEL_BYPASS = 0;
+  } else {
+    KERNEL_BYPASS = atoi(env);
   }
-  KERNEL_BYPASS = atoi(env);
   return KERNEL_BYPASS;
 }
 
@@ -94,10 +104,12 @@ static void calc_size_inkernel(int nelem, vector<int> &res) {
   }
 }
 
-static void calc_sendsize_channel(int nranks, int myrank, int count,
-                                  int nchannels, int mychannel, int nthreads,
-                                  int tsize, vector<int> &res) {
-  // assert(nranks == 2);
+// calculate the expected send size for myrank
+// this is also used to calculated the recv size for the rank that will
+// receive from myrank
+static void calc_size_channel(int nranks, int myrank, int count, int nchannels,
+                              int mychannel, int nthreads, int tsize,
+                              vector<int> &res) {
   const int chunkSize = 524288;
   int bid = mychannel;
   int loopSize = nchannels * nranks * chunkSize;
@@ -164,9 +176,20 @@ static void calc_sendsize_channel(int nranks, int myrank, int count,
   LOG_MOD(NCCL_MOD, "Calculated sizes for rank %d: %s", myrank, szs.c_str());
 }
 
+static void calc_sendsize_channel(int nranks, int myrank, int count,
+                                  int nchannels, int mychannel, int nthreads,
+                                  int tsize, vector<int> &res) {
+  calc_size_channel(nranks, myrank, count, nchannels, mychannel, nthreads,
+                    tsize, res);
+}
+
 static void calc_recvsize_channel(int nranks, int myrank, int count,
                                   int nchannels, int mychannel, int nthreads,
-                                  int tsize, vector<int> &res) {}
+                                  int tsize, vector<int> &res) {
+  int target_rank = (nranks + myrank - 1) % nranks;
+  calc_size_channel(nranks, target_rank, count, nchannels, mychannel, nthreads,
+                    tsize, res);
+}
 
 static int check_done_ch(modChannelInfo &ch) {
   if (ch.sendTail == ch.sendSizes.size() &&
@@ -208,17 +231,16 @@ static void rankInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
                      ncclInfo *info) {
   modRankInfo &rankinfo = coordinator->ranks[info->comm->rank];
   rankinfo.myrank = info->comm->rank;
-  if (rankinfo.myrank % 2 == 0) {
-    rankinfo.recv = 1;
-    rankinfo.send = 0;
-    assert(coordinator->recvrank == -1);
-    coordinator->recvrank = rankinfo.myrank;
-  } else {
-    rankinfo.recv = 0;
+  rankinfo.send = 0;
+  rankinfo.recv = 0;
+  if (rankinfo.myrank == coordinator->sendrank) {
     rankinfo.send = 1;
-    assert(coordinator->sendrank == -1);
-    coordinator->sendrank = rankinfo.myrank;
   }
+  if (rankinfo.myrank == coordinator->recvrank) {
+    rankinfo.recv = 1;
+  }
+  LOG_MOD(NCCL_MOD, "rankInit: myrank=%d, send=%d, recv=%d", rankinfo.myrank,
+          rankinfo.send, rankinfo.recv);
   rankinfo.channels = vector<modChannelInfo>();
   for (int i = 0; i < info->nChannels; ++i) {
     modChannelInfo ch;
@@ -246,11 +268,13 @@ static void metaInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
   if (!coordinator->init) {
     coordinator->init = 1;
     coordinator->done = 0;
-    coordinator->sendrank = -1;
-    coordinator->recvrank = -1;
 
-    coordinator->proxyOp = *proxyOp;
-    coordinator->info = *info;
+    delete coordinator->proxyOp;
+    coordinator->proxyOp = new ncclProxyOp;
+    *coordinator->proxyOp = *proxyOp;
+    delete coordinator->info;
+    coordinator->info = new ncclInfo;
+    *coordinator->info = *info;
 
     modTaskInfo task;
     task.count = info->count;
@@ -269,10 +293,15 @@ static void metaInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
     coordinator->comm = comm;
     coordinator->task = task;
     coordinator->ranks = map<int, modRankInfo>();
-    LOG_MOD(
-        NCCL_MOD,
-        "comm.nranks=%d, comm.nnodes=%d, comm.mynode=%d, comm.nrankpernode=%d",
-        comm.nranks, comm.nnodes, comm.mynode, comm.nrankpernode);
+
+    coordinator->sendrank = comm.nrankpernode * (comm.mynode + 1) - 1;
+    coordinator->recvrank = comm.nrankpernode * comm.mynode;
+
+    LOG_MOD(NCCL_MOD,
+            "comm.nranks=%d, comm.nnodes=%d, comm.mynode=%d, "
+            "comm.nrankpernode=%d, sendrank=%d, recvrank=%d",
+            comm.nranks, comm.nnodes, comm.mynode, comm.nrankpernode,
+            coordinator->sendrank, coordinator->recvrank);
   }
 }
 

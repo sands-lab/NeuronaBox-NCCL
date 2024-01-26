@@ -52,8 +52,8 @@ struct modCoordinator {
   modTaskInfo task;
   std::map<int, modRankInfo> ranks;
 
-  ncclProxyOp proxyOp;
-  ncclInfo info;
+  ncclProxyOp *proxyOp;
+  ncclInfo *info;
 };
 
 extern modCoordinator global_coordinator;
