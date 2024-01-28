@@ -4,29 +4,30 @@
  * See LICENSE.txt for license information
  ************************************************************************/
 
-#include "nccl.h"
-#include "channel.h"
-#include "nvmlwrap.h"
-#include "gdrwrap.h"
-#include "bootstrap.h"
-#include "transport.h"
-#include "group.h"
-#include "net.h"
-#include "coll_net.h"
-#include "enqueue.h"
-#include "graph.h"
 #include "argcheck.h"
+#include "bootstrap.h"
+#include "channel.h"
+#include "coll_net.h"
+#include "coordinator.h"
+#include "enqueue.h"
+#include "gdrwrap.h"
+#include "graph.h"
+#include "group.h"
+#include "nccl.h"
+#include "net.h"
+#include "nvmlwrap.h"
+#include "param.h"
+#include "transport.h"
 #include "tuner.h"
-#include <fcntl.h>
-#include <string.h>
-#include <errno.h>
 #include <assert.h>
 #include <dlfcn.h>
-#include <sys/types.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <string.h>
+#include <string>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
-#include "param.h"
-
 #define STR2(v) #v
 #define STR(v) STR2(v)
 
@@ -517,6 +518,17 @@ static ncclResult_t setupChannel(struct ncclComm* comm, int channelId, int rank,
   for (int i=0; i<nranks; i++) {
     ring->userRanks[i] = ringRanks[(i+ixRank)%nranks];
   }
+  std::string ringStr, ringranks;
+  for (int i = 0; i < nranks; i++) {
+    ringStr += std::to_string(ring->userRanks[i]) + " ";
+    ringranks += std::to_string(ringRanks[i]) + " ";
+  }
+  LOG_MOD(NCCL_MOD,
+          "rank=%d Index=%d ChannelId=%d RingRanks: %s RingUserRank : %s, "
+          "prev:%d, next:%d",
+          rank, ring->index, channelId, ringranks.c_str(), ringStr.c_str(),
+          ring->prev, ring->next);
+  modCoordinatorUpdateMap(&global_coordinator, rank, channelId, ring->index);
   return ncclSuccess;
 }
 

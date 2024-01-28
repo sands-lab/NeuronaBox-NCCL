@@ -544,6 +544,11 @@ ncclResult_t ncclProxySaveOp(struct ncclComm* comm, struct ncclProxyOp* op, bool
   case ncclPatternPipelineFrom:
   case ncclPatternPipelineTo: {
       struct ncclRing* ring = &channel->ring;
+      LOG_MOD(
+          NCCL_MOD,
+          "at proxy, channelid=%d, ringindex=%d, prev=%d, next=%d, userrank=%d",
+          op->channelId, ring->index, ring->prev, ring->next,
+          ring->userRanks[ring->index]);
       if (NeedProxy(proxyRecv, op->pattern, op->root, ring, comm->nRanks)) {
         NCCLCHECK(SaveProxy(comm, channel, proxyRecv, ring->prev, op, 0, justInquire));
       }

@@ -1216,11 +1216,12 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
             }
           }
           if (ready) {
-            LOG_MOD(NCCL_MOD, "sub%d in send proxy progress, size is %d", s,
-                    size);
             // Data is ready, try to send.
             NCCLCHECK(proxyState->ncclNet->isend(resources->netSendComm, buff, size, resources->tpRank, mhandle, sub->requests+buffSlot));
             if (sub->requests[buffSlot] != NULL) {
+              LOG_MOD(NCCL_MOD,
+                      "sub%d:chan%d in send proxy progress, size is %d", s,
+                      sub->channelId, size);
               if (KERNEL_BYPASS) {
                 modCoordinatorSend(&global_coordinator, sub->channelId, size);
               }
@@ -1379,17 +1380,18 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
         int sizes[NCCL_PROXY_MAX_SUBS];
         void* mhandles[NCCL_PROXY_MAX_SUBS];
         for (int i=0; i<NCCL_PROXY_MAX_SUBS; i++) sizes[i] = 0;
-        NCCLCHECK(proxyState->ncclNet->test(subGroup->requests[step%NCCL_STEPS], &done, sizes));
-        LOG_MOD(NCCL_MOD, "recvProxyProgress, done is %d", done);
+        NCCLCHECK(proxyState->ncclNet->test(
+            subGroup->requests[step % NCCL_STEPS], &done, sizes));
         if (done) {
           int needFlush = 0;
           int totalSize = 0;
           for (int i=0; i<NCCL_PROXY_MAX_SUBS; i++) totalSize += sizes[i];
           //! mod here, we need to inc recv pointer after recv something
-          LOG_MOD(NCCL_MOD, "recvProxyProgress done, totalSize is %d",
-                  totalSize);
+          LOG_MOD(NCCL_MOD, "recv consumed, totalSize is %d", totalSize);
           for (int i = 0; i < subGroup->groupSize; i++) {
             struct ncclProxySubArgs *sub = subGroup + i;
+            LOG_MOD(NCCL_MOD, "sub%d:chan%d, size is %d", s + i, sub->channelId,
+                    sizes[i]);
             if (KERNEL_BYPASS) {
               modCoordinatorRecv(&global_coordinator, sub->channelId, sizes[i]);
             }

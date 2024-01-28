@@ -52,11 +52,28 @@ struct modCoordinator {
   modTaskInfo task;
   std::map<int, modRankInfo> ranks;
 
+  // <channelId, ringIndex>
+  std::map<int, int> sendRingMap;
+  std::map<int, int> recvRingMap;
+
   ncclProxyOp *proxyOp;
   ncclInfo *info;
 };
 
+struct modTopology {
+  int nranks;
+  int nnodes;
+  int nrankpernode;
+  int nchannels;
+
+  // ranks in this node
+  std::vector<int> ranks;
+  // <rank, channel>
+  std::map<int, int> ringmap;
+}
+
 extern modCoordinator global_coordinator;
+extern modTopology global_topology;
 
 ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp* proxyOp, ncclInfo* info);
 
@@ -68,5 +85,11 @@ ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int cid,
 ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int cid, int size);
 
 ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid, int size);
+
+ncclResult_t modTopologyInit(modTopology *topology, int nranks, int nnodes,
+                             int nrankpernode, int nchannels);
+
+ncclResult_t modTopologyUpdateMap(modTopology *topology, int rank, int channel,
+                                  ncclRing *ring);
 
 #endif

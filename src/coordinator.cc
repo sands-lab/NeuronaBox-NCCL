@@ -8,7 +8,9 @@
 #include <stdlib.h>
 #include <string>
 using namespace std;
-// total = 4000
+
+int KERNEL_BYPASS = -1;
+
 modCoordinator global_coordinator = {0,
                                      0,
                                      -1,
@@ -18,54 +20,8 @@ modCoordinator global_coordinator = {0,
                                      std::map<int, modRankInfo>(),
                                      nullptr,
                                      nullptr};
-int KERNEL_BYPASS = -1;
-/*
 
-template<typename X, typename Y, typename Z = decltype(X()+Y())>
-__host__ __device__ constexpr Z divUp(X x, Y y) {
-  return (x+y-1)/y;
-}
-
-__device__ static int Simple::calcBytePerStep() {
-    return ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE]/NCCL_STEPS;
-}
-
-using Proto = ProtoSimple<ALLREDUCE_CHUNKSTEPS/ALLREDUCE_SLICESTEPS,
-ALLREDUCE_SLICESTEPS>; #define ALLREDUCE_SLICESTEPS (NCCL_STEPS/4) = 2
-SlicePerChunk #define ALLREDUCE_CHUNKSTEPS (NCCL_STEPS/2) = 4 StepPerSlice
-
-stepSize(stepSize_ == 0 ?
-ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE]/NCCL_STEPS/sizeof(T) : stepSize_)
-stepSize = 131072
-
-
-    int sliceSize = stepSize*StepPerSlice; // 131072 * 4 = 524288
-    sliceSize = max(divUp(nelem, 16*SlicePerChunk)*16, sliceSize/32);
-              = max([(nelem+32 - 1) / 32] * 16)
-    sliceSize = sliceSize < nelem - offset ? sliceSize : nelem - offset;
-    waitPeer<DirectRecv, DirectSend, Recv, Send, Src, Dst>(
-        srcIx, dstIx, offset, sliceSize);
-
-
-const ssize_t chunkSize = int(Proto::calcBytePerStep()/sizeof(T) * (Proto::Id ==
-NCCL_PROTO_SIMPLE ? ALLREDUCE_CHUNKSTEPS : 1)); = 524288
-
-const ssize_t loopSize = nChannels*nranks*chunkSize;
-
-!for now gridOffset = 0, since one loop is enough for our size
-
-if (Proto::Id == NCCL_PROTO_SIMPLE) {
-    realChunkSize = min(chunkSize, divUp(size-gridOffset, nChannels*nranks));
-    realChunkSize = roundUp(realChunkSize,
-(nthreads-WARP_SIZE)*sizeof(uint64_t)/sizeof(T)); !for simple, WRAP_SIZE = 32
-}
-else
-    realChunkSize = min(chunkSize, divUp(size-gridOffset,
-nChannels*nranks*minChunkSize)*minChunkSize); realChunkSize =
-int(realChunkSize); nelem = min(realChunkSize, size-offset);
-
-
-*/
+modTopology global_topology = {0, 0, 0, 0, vector<int>(), map<int, int>()};
 
 static int getKernelBypass() {
   LOG_MOD(NCCL_MOD, "getKernelBypass called");
