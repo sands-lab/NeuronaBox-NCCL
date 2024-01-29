@@ -528,7 +528,8 @@ static ncclResult_t setupChannel(struct ncclComm* comm, int channelId, int rank,
           "prev:%d, next:%d",
           rank, ring->index, channelId, ringranks.c_str(), ringStr.c_str(),
           ring->prev, ring->next);
-  modCoordinatorUpdateMap(&global_coordinator, rank, channelId, ring->index);
+  modTopologyUpdateMap(&global_topology, rank, channelId, ring, ringRanks,
+                       nranks);
   return ncclSuccess;
 }
 

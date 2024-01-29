@@ -41,6 +41,8 @@ struct modTaskInfo {
   int reduceOp;  // placeholder, always sum
   int algo;      // placeholder, always ring
   int proto;     // placeholder, always Simple
+  int nchannels;
+  int nthreads;
 };
 
 struct modCoordinator {
@@ -61,16 +63,19 @@ struct modCoordinator {
 };
 
 struct modTopology {
+  int init;
   int nranks;
   int nnodes;
   int nrankpernode;
   int nchannels;
 
   // ranks in this node
-  std::vector<int> ranks;
-  // <rank, channel>
-  std::map<int, int> ringmap;
-}
+  std::vector<int> myranks;
+  std::map<int, int> prev;
+  std::map<int, int> next;
+  // <rank, channel> -> <ringIndex>
+  std::map<std::pair<int, int>, int> ringmap;
+};
 
 extern modCoordinator global_coordinator;
 extern modTopology global_topology;
@@ -86,10 +91,10 @@ ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int cid, int size);
 
 ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid, int size);
 
-ncclResult_t modTopologyInit(modTopology *topology, int nranks, int nnodes,
-                             int nrankpernode, int nchannels);
+ncclResult_t modTopologyInit(modTopology *topology, ncclProxyOp *proxyOp,
+                             ncclInfo *info);
 
 ncclResult_t modTopologyUpdateMap(modTopology *topology, int rank, int channel,
-                                  ncclRing *ring);
+                                  ncclRing *ring, int *ringranks, int nranks);
 
 #endif

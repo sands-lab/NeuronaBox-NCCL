@@ -1460,6 +1460,8 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
     LOG_MOD(NCCL_MOD, "Using Protocol Unkonwn!");
   }
   //! for now, initialize cooridnator here
+  //! must init topology first!
+  modTopologyInit(&global_topology, proxyOp, info);
   modCoordinatorInit(&global_coordinator, proxyOp, info);
   return ncclSuccess;
 }

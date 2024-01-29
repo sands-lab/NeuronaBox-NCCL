@@ -11,17 +11,52 @@ using namespace std;
 
 int KERNEL_BYPASS = -1;
 
-modCoordinator global_coordinator = {0,
-                                     0,
-                                     -1,
-                                     -1,
-                                     modCommInfo{0, 0, 0, 0},
-                                     modTaskInfo{0, 0, 0, 0, 0, 0},
-                                     std::map<int, modRankInfo>(),
-                                     nullptr,
-                                     nullptr};
+modCoordinator global_coordinator;
 
-modTopology global_topology = {0, 0, 0, 0, vector<int>(), map<int, int>()};
+modTopology global_topology;
+
+ncclResult_t modTopologyInit(modTopology *topology, ncclProxyOp *proxyOp,
+                             ncclInfo *info) {
+  ncclComm *comm = info->comm;
+  int nranks = comm->nRanks;
+  int myrank = comm->rank;
+  int nchannels = info->nChannels;
+  LOG_MOD(NCCL_MOD, "modTopologyInit %d, ringmapsize=%lu, inited:%d", myrank,
+          topology->ringmap.size(), topology->init);
+  if (!topology->init) {
+
+    topology->nranks = nranks;
+    topology->nnodes =
+        atoi(getenv("N_MPI_RANKS")); // should be set by application!
+    topology->nrankpernode = topology->nranks / topology->nnodes;
+    topology->nchannels = nchannels;
+    assert(topology->nranks % topology->nnodes == 0);
+    topology->myranks = vector<int>();
+    topology->init = 1;
+  }
+
+  topology->myranks.push_back(myrank);
+  return ncclSuccess;
+}
+
+ncclResult_t modTopologyUpdateMap(modTopology *topology, int rank, int channel,
+                                  ncclRing *ring, int *ringranks, int nranks) {
+  topology->prev[rank] = ring->prev;
+  topology->next[rank] = ring->next;
+  topology->ringmap[make_pair(rank, channel)] = ring->index;
+
+  if (rank == 0) {
+    for (int i = 1; i < nranks; ++i) {
+      topology->ringmap[make_pair(i, channel)] = ringranks[i];
+      LOG_MOD(NCCL_MOD, "update ringmap rk%d ringidx%d ch%d", i,
+              topology->ringmap[make_pair(i, channel)], channel);
+    }
+  }
+  LOG_MOD(NCCL_MOD, "modTopologyUpdateMap [%d->%d->%d], mapsize=%lu",
+          topology->prev[rank], rank, topology->next[rank],
+          topology->ringmap.size());
+  return ncclSuccess;
+}
 
 static int getKernelBypass() {
   LOG_MOD(NCCL_MOD, "getKernelBypass called");
@@ -63,14 +98,14 @@ static void calc_size_inkernel(int nelem, vector<int> &res) {
 // calculate the expected send size for myrank
 // this is also used to calculated the recv size for the rank that will
 // receive from myrank
-static void calc_size_channel(int nranks, int myrank, int count, int nchannels,
-                              int mychannel, int nthreads, int tsize,
-                              vector<int> &res) {
+static void calc_size_channel(int nranks, int ringindex, int count,
+                              int nchannels, int mychannel, int nthreads,
+                              int tsize, vector<int> &res) {
   const int chunkSize = 524288;
   int bid = mychannel;
   int loopSize = nchannels * nranks * chunkSize;
   int size = count;
-  int ringIx = myrank;
+  int ringIx = ringindex;
 
   for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
     ssize_t realChunkSize;
@@ -132,28 +167,35 @@ static void calc_size_channel(int nranks, int myrank, int count, int nchannels,
 static void calc_sendsize_channel(int nranks, int myrank, int count,
                                   int nchannels, int mychannel, int nthreads,
                                   int tsize, vector<int> &res) {
-  calc_size_channel(nranks, myrank, count, nchannels, mychannel, nthreads,
+  auto &ringmap = global_topology.ringmap;
+  assert(ringmap.count(make_pair(myrank, mychannel)) > 0);
+  int myringix = ringmap[make_pair(myrank, mychannel)];
+  calc_size_channel(nranks, myringix, count, nchannels, mychannel, nthreads,
                     tsize, res);
   std::string szs;
   for (int i = 0; i < res.size(); ++i) {
     szs = szs + " " + std::to_string(res[i]);
   }
-  LOG_MOD(NCCL_MOD, "Calculated send sizes for rank %d: %s", myrank,
-          szs.c_str());
+  LOG_MOD(NCCL_MOD, "Calculated send sizes for ringix:%d rank %d: %s, ch=%d",
+          myringix, myrank, szs.c_str(), mychannel);
 }
 
 static void calc_recvsize_channel(int nranks, int myrank, int count,
                                   int nchannels, int mychannel, int nthreads,
                                   int tsize, vector<int> &res) {
-  int target_rank = (nranks + myrank - 1) % nranks;
-  calc_size_channel(nranks, target_rank, count, nchannels, mychannel, nthreads,
-                    tsize, res);
+  auto &ringmap = global_topology.ringmap;
+  assert(ringmap.count(make_pair(myrank, mychannel)) > 0);
+  int target = global_topology.prev[myrank];
+  int target_ringix = ringmap[make_pair(target, mychannel)];
+  calc_size_channel(nranks, target_ringix, count, nchannels, mychannel,
+                    nthreads, tsize, res);
   std::string szs;
   for (int i = 0; i < res.size(); ++i) {
     szs = szs + " " + std::to_string(res[i]);
   }
-  LOG_MOD(NCCL_MOD, "Calculated recv sizes for rank %d: %s", myrank,
-          szs.c_str());
+  LOG_MOD(NCCL_MOD,
+          "Calculated recv sizes for ringix:%d targetrk:%d, rank %d: %s, ch=%d",
+          target_ringix, target, myrank, szs.c_str(), mychannel);
 }
 
 static int check_done_ch(modChannelInfo &ch) {
@@ -192,10 +234,14 @@ static void update_done(modCoordinator *coordinator) {
   }
 }
 
-static void rankInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
-                     ncclInfo *info) {
-  modRankInfo &rankinfo = coordinator->ranks[info->comm->rank];
-  rankinfo.myrank = info->comm->rank;
+static void rankInit(modCoordinator *coordinator, int rank) {
+  int nchannels = coordinator->task.nchannels;
+  int nthreads = coordinator->task.nthreads;
+  int nranks = coordinator->comm.nranks;
+  int count = coordinator->task.count;
+
+  modRankInfo &rankinfo = coordinator->ranks[rank];
+  rankinfo.myrank = rank;
   rankinfo.send = 0;
   rankinfo.recv = 0;
   if (rankinfo.myrank == coordinator->sendrank) {
@@ -207,20 +253,18 @@ static void rankInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
   LOG_MOD(NCCL_MOD, "rankInit: myrank=%d, send=%d, recv=%d", rankinfo.myrank,
           rankinfo.send, rankinfo.recv);
   rankinfo.channels = vector<modChannelInfo>();
-  for (int i = 0; i < info->nChannels; ++i) {
+  for (int i = 0; i < nchannels; ++i) {
     modChannelInfo ch;
     ch.bid = i;
     ch.sendSizes = vector<int>();
     ch.recvSizes = vector<int>();
     if (rankinfo.send) {
-      calc_sendsize_channel(info->comm->nRanks, rankinfo.myrank, info->count,
-                            info->nChannels, i, info->nThreads, sizeof(float),
-                            ch.sendSizes);
+      calc_sendsize_channel(nranks, rankinfo.myrank, count, nchannels, i,
+                            nthreads, sizeof(float), ch.sendSizes);
     }
     if (rankinfo.recv) {
-      calc_recvsize_channel(info->comm->nRanks, rankinfo.myrank, info->count,
-                            info->nChannels, i, info->nThreads, sizeof(float),
-                            ch.recvSizes);
+      calc_recvsize_channel(nranks, rankinfo.myrank, count, nchannels, i,
+                            nthreads, sizeof(float), ch.recvSizes);
     }
     ch.sendTail = 0;
     ch.recvTail = 0;
@@ -247,6 +291,8 @@ static void metaInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
     task.primitive = 0;
     task.reduceOp = 0;
     task.algo = 0;
+    task.nchannels = info->nChannels;
+    task.nthreads = info->nThreads;
 
     modCommInfo comm;
     comm.nranks = info->comm->nRanks;
@@ -258,15 +304,6 @@ static void metaInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
     coordinator->comm = comm;
     coordinator->task = task;
     coordinator->ranks = map<int, modRankInfo>();
-
-    coordinator->sendrank = comm.nrankpernode * (comm.mynode + 1) - 1;
-    coordinator->recvrank = comm.nrankpernode * comm.mynode;
-
-    LOG_MOD(NCCL_MOD,
-            "comm.nranks=%d, comm.nnodes=%d, comm.mynode=%d, "
-            "comm.nrankpernode=%d, sendrank=%d, recvrank=%d",
-            comm.nranks, comm.nnodes, comm.mynode, comm.nrankpernode,
-            coordinator->sendrank, coordinator->recvrank);
   }
 }
 
@@ -285,8 +322,39 @@ ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp *proxyO
           "nchannels=%d, "
           "nthreads=%d",
           KERNEL_BYPASS, count, nranks, myrank, nchannels, nthreads);
-   rankInit(coordinator, proxyOp, info);
-   return ncclSuccess;
+  map<int, bool> ismynode;
+  auto &g = global_topology;
+  for (int i = 0; i < g.nranks; ++i) {
+    ismynode[i] = false;
+  }
+  for (int i = 0; i < g.myranks.size(); ++i) {
+    ismynode[g.myranks[i]] = true;
+  }
+  coordinator->sendrank = -1;
+  coordinator->recvrank = -1;
+  for (auto i : g.myranks) {
+    auto prev = g.prev[i];
+    auto next = g.next[i];
+    LOG_MOD(NCCL_MOD, "rank=%d, prev=%d, next=%d, ismynode[rank]=%d", i, prev,
+            next, (int)ismynode[i]);
+    if (ismynode[prev] && !ismynode[next]) {
+      assert(coordinator->sendrank == -1);
+      coordinator->sendrank = i;
+    }
+    if (!ismynode[prev] && ismynode[next]) {
+      assert(coordinator->recvrank == -1);
+      coordinator->recvrank = i;
+    }
+  }
+  if (coordinator->sendrank != -1 && coordinator->recvrank != -1) {
+    LOG_MOD(NCCL_MOD,
+            "sendrecv solved: sendrank=%d, recvrank=%d, ringmapsize=%lu",
+            coordinator->sendrank, coordinator->recvrank, g.ringmap.size());
+    for (auto i : g.myranks) {
+      rankInit(coordinator, i);
+    }
+  }
+  return ncclSuccess;
 }
 
 ncclResult_t modCoordinatorDestroy(modCoordinator *coordinator) {
