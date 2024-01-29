@@ -10,6 +10,8 @@ extern int KERNEL_BYPASS;
 // channel represents a connection between two ranks
 struct modChannelInfo {
   int bid;
+  int send;
+  int recv;
   std::vector<int> sendSizes;
   std::vector<int> recvSizes;
   int sendTail;
