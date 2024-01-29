@@ -15,49 +15,6 @@ modCoordinator global_coordinator;
 
 modTopology global_topology;
 
-ncclResult_t modTopologyInit(modTopology *topology, ncclProxyOp *proxyOp,
-                             ncclInfo *info) {
-  ncclComm *comm = info->comm;
-  int nranks = comm->nRanks;
-  int myrank = comm->rank;
-  int nchannels = info->nChannels;
-  LOG_MOD(NCCL_MOD, "modTopologyInit %d, ringmapsize=%lu, inited:%d", myrank,
-          topology->ringmap.size(), topology->init);
-  if (!topology->init) {
-
-    topology->nranks = nranks;
-    topology->nnodes =
-        atoi(getenv("N_MPI_RANKS")); // should be set by application!
-    topology->nrankpernode = topology->nranks / topology->nnodes;
-    topology->nchannels = nchannels;
-    assert(topology->nranks % topology->nnodes == 0);
-    topology->myranks = vector<int>();
-    topology->init = 1;
-  }
-
-  topology->myranks.push_back(myrank);
-  return ncclSuccess;
-}
-
-ncclResult_t modTopologyUpdateMap(modTopology *topology, int rank, int channel,
-                                  ncclRing *ring, int *ringranks, int nranks) {
-  topology->prev[rank] = ring->prev;
-  topology->next[rank] = ring->next;
-  topology->ringmap[make_pair(rank, channel)] = ring->index;
-
-  if (rank == 0) {
-    for (int i = 1; i < nranks; ++i) {
-      topology->ringmap[make_pair(i, channel)] = ringranks[i];
-      LOG_MOD(NCCL_MOD, "update ringmap rk%d ringidx%d ch%d", i,
-              topology->ringmap[make_pair(i, channel)], channel);
-    }
-  }
-  LOG_MOD(NCCL_MOD, "modTopologyUpdateMap [%d->%d->%d], mapsize=%lu",
-          topology->prev[rank], rank, topology->next[rank],
-          topology->ringmap.size());
-  return ncclSuccess;
-}
-
 static int getKernelBypass() {
   LOG_MOD(NCCL_MOD, "getKernelBypass called");
   if (KERNEL_BYPASS != -1) {
@@ -309,34 +266,23 @@ static void metaInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
   }
 }
 
-ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp *proxyOp, ncclInfo *info) {
-  getKernelBypass();
-  metaInit(coordinator, proxyOp, info);
-  int count = coordinator->task.count;
-  assert(count == info->count);
-  ncclComm *comm = info->comm;
-  int nranks = comm->nRanks;
-  int myrank = comm->rank;
-  int nchannels = info->nChannels;
-  int nthreads = info->nThreads;
-  LOG_MOD(NCCL_MOD,
-          "modCoordinatorInit: kbypass=%d, count=%d, nranks=%d, myrank=%d, "
-          "nchannels=%d, "
-          "nthreads=%d",
-          KERNEL_BYPASS, count, nranks, myrank, nchannels, nthreads);
+static void sendrecvInit(modCoordinator *coordinator, modTopology *topology) {
+  if (topology->myranks.size() < topology->nrankpernode) {
+    return;
+  }
   map<int, bool> ismynode;
-  auto &g = global_topology;
-  for (int i = 0; i < g.nranks; ++i) {
+
+  for (int i = 0; i < topology->nranks; ++i) {
     ismynode[i] = false;
   }
-  for (int i = 0; i < g.myranks.size(); ++i) {
-    ismynode[g.myranks[i]] = true;
+  for (int i = 0; i < topology->myranks.size(); ++i) {
+    ismynode[topology->myranks[i]] = true;
   }
   coordinator->sendrank = -1;
   coordinator->recvrank = -1;
-  for (auto i : g.myranks) {
-    auto prev = g.prev[i];
-    auto next = g.next[i];
+  for (auto i : topology->myranks) {
+    auto prev = topology->prev[i];
+    auto next = topology->next[i];
     LOG_MOD(NCCL_MOD, "rank=%d, prev=%d, next=%d, ismynode[rank]=%d", i, prev,
             next, (int)ismynode[i]);
     if (ismynode[prev] && !ismynode[next]) {
@@ -349,12 +295,33 @@ ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp *proxyO
     }
   }
   if (coordinator->sendrank != -1 && coordinator->recvrank != -1) {
-    LOG_MOD(NCCL_MOD,
-            "sendrecv solved: sendrank=%d, recvrank=%d, ringmapsize=%lu",
-            coordinator->sendrank, coordinator->recvrank, g.ringmap.size());
-    for (auto i : g.myranks) {
+    LOG_MOD(
+        NCCL_MOD, "sendrecv solved: sendrank=%d, recvrank=%d, ringmapsize=%lu",
+        coordinator->sendrank, coordinator->recvrank, topology->ringmap.size());
+    for (auto i : topology->myranks) {
       rankInit(coordinator, i);
     }
+  }
+}
+
+ncclResult_t modCoordinatorInit(modCoordinator *coordinator,
+                                ncclProxyOp *proxyOp, ncclInfo *info) {
+  getKernelBypass();
+  if (KERNEL_BYPASS == 1) {
+    metaInit(coordinator, proxyOp, info);
+    int count = coordinator->task.count;
+    assert(count == info->count);
+    ncclComm *comm = info->comm;
+    int nranks = comm->nRanks;
+    int myrank = comm->rank;
+    int nchannels = info->nChannels;
+    int nthreads = info->nThreads;
+    LOG_MOD(NCCL_MOD,
+            "modCoordinatorInit: kbypass=%d, count=%d, nranks=%d, myrank=%d, "
+            "nchannels=%d, "
+            "nthreads=%d",
+            KERNEL_BYPASS, count, nranks, myrank, nchannels, nthreads);
+    sendrecvInit(coordinator, &global_topology);
   }
   return ncclSuccess;
 }
@@ -412,15 +379,74 @@ ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid,
   return ncclSuccess;
 }
 
-NCCL_API(ncclResult_t, ncclModSync, ncclComm_t comm, cudaStream_t stream);
+ncclResult_t modTopologyInit(modTopology *topology, ncclProxyOp *proxyOp,
+                             ncclInfo *info) {
+  getKernelBypass();
+  if (KERNEL_BYPASS == 1) {
+    ncclComm *comm = info->comm;
+    int nranks = comm->nRanks;
+    int myrank = comm->rank;
+    int nchannels = info->nChannels;
+    LOG_MOD(NCCL_MOD, "modTopologyInit %d, ringmapsize=%lu, inited:%d", myrank,
+            topology->ringmap.size(), topology->init);
+    if ((topology->init & topoInitState::META_INITED) == 0) {
 
-ncclResult_t ncclModSync(ncclComm_t comm, cudaStream_t stream) {
+      topology->nranks = nranks;
+      topology->nnodes =
+          atoi(getenv("N_MPI_RANKS")); // should be set by application!
+      topology->nrankpernode = topology->nranks / topology->nnodes;
+      assert(topology->nranks % topology->nnodes == 0);
+      topology->init =
+          (topoInitState)(topology->init | topoInitState::META_INITED);
+    }
+    if ((topology->init & topoInitState::PER_CALL_INITED) == 0) {
+      topology->nchannels = nchannels;
+      topology->myranks = vector<int>();
+      topology->init =
+          (topoInitState)(topology->init | topoInitState::PER_CALL_INITED);
+    }
+    topology->myranks.push_back(myrank);
+  }
+  return ncclSuccess;
+}
+
+ncclResult_t modTopologyUpdateMap(modTopology *topology, int rank, int channel,
+                                  ncclRing *ring, int *ringranks, int nranks) {
+  topology->prev[rank] = ring->prev;
+  topology->next[rank] = ring->next;
+  topology->ringmap[make_pair(rank, channel)] = ring->index;
+
+  if (rank == 0) {
+    for (int i = 1; i < nranks; ++i) {
+      topology->ringmap[make_pair(i, channel)] = ringranks[i];
+      LOG_MOD(NCCL_MOD, "update ringmap rk%d ringidx%d ch%d", i,
+              topology->ringmap[make_pair(i, channel)], channel);
+    }
+  }
+  LOG_MOD(NCCL_MOD, "modTopologyUpdateMap [%d->%d->%d], mapsize=%lu",
+          topology->prev[rank], rank, topology->next[rank],
+          topology->ringmap.size());
+  return ncclSuccess;
+}
+
+ncclResult_t modTopologyDestroy(modTopology *topology) {
+  assert(topology->init & topoInitState::PER_CALL_INITED);
+  topology->init =
+      (topoInitState)(topology->init ^ topoInitState::PER_CALL_INITED);
+  LOG_MOD(NCCL_MOD, "modTopologyDestroy");
+  return ncclSuccess;
+}
+
+NCCL_API(ncclResult_t, ncclModSync);
+
+ncclResult_t ncclModSync() {
   if (KERNEL_BYPASS) {
     LOG_MOD(NCCL_MOD, "ncclModSync");
     while (global_coordinator.done == 0) {
       usleep(100);
     }
     modCoordinatorDestroy(&global_coordinator);
+    modTopologyDestroy(&global_topology);
   }
   return ncclSuccess;
 }

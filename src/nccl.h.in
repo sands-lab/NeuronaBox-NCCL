@@ -440,7 +440,7 @@ ncclResult_t pncclCommDeregister(const ncclComm_t comm, void* handle);
  * Only used for emulator
  * Sync the coordinator state
  */
-ncclResult_t ncclModSync(ncclComm_t comm, cudaStream_t stream);
+ncclResult_t ncclModSync();
 
 #ifdef __cplusplus
 } // end extern "C"

@@ -64,8 +64,14 @@ struct modCoordinator {
   ncclInfo *info;
 };
 
+typedef enum {
+  UNINITED = 0,
+  META_INITED = 1,
+  PER_CALL_INITED = 2,
+} topoInitState;
+
 struct modTopology {
-  int init;
+  topoInitState init;
   int nranks;
   int nnodes;
   int nrankpernode;
@@ -98,5 +104,7 @@ ncclResult_t modTopologyInit(modTopology *topology, ncclProxyOp *proxyOp,
 
 ncclResult_t modTopologyUpdateMap(modTopology *topology, int rank, int channel,
                                   ncclRing *ring, int *ringranks, int nranks);
+
+ncclResult_t modTopologyDestroy(modTopology *topology);
 
 #endif
