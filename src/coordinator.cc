@@ -9,24 +9,37 @@
 #include <string>
 using namespace std;
 
-int KERNEL_BYPASS = -1;
-
+int MOD_KERNEL_BYPASS = -1;
+int MOD_N_NODES = -1;
+int MOD_MY_NODE = -1;
 modCoordinator global_coordinator;
 
 modTopology global_topology;
 
-static int getKernelBypass() {
-  LOG_MOD(NCCL_MOD, "getKernelBypass called");
-  if (KERNEL_BYPASS != -1) {
-    return KERNEL_BYPASS;
-  }
-  char *env = getenv("NCCL_KERNEL_BYPASS");
+ncclResult_t modGetAllEnvVars() {
+  LOG_MOD(NCCL_MOD, "modGetAllEnvVars");
+  char *env = getenv("N_MPI_RANKS");
   if (env == NULL) {
-    KERNEL_BYPASS = 0;
+    LOG_MOD(NCCL_LOG_ABORT, "Error: N_MPI_RANKS not set");
+    return ncclModError;
   } else {
-    KERNEL_BYPASS = atoi(env);
+    MOD_N_NODES = atoi(env);
   }
-  return KERNEL_BYPASS;
+  env = getenv("MY_MPI_RANK");
+  if (env == NULL) {
+    LOG_MOD(NCCL_LOG_ABORT, "Error: MY_MPI_RANK not set");
+    return ncclModError;
+  } else {
+    MOD_MY_NODE = atoi(env);
+  }
+  env = getenv("NCCL_MOD_KERNEL_BYPASS");
+  if (env == NULL) {
+    LOG_MOD(NCCL_MOD, "NCCL_MOD_KERNEL_BYPASS not set, default to 0");
+    MOD_KERNEL_BYPASS = 0;
+  } else {
+    MOD_KERNEL_BYPASS = atoi(env);
+  }
+  return ncclSuccess;
 }
 
 static void calc_size_inkernel(int nelem, vector<int> &res) {
@@ -255,8 +268,8 @@ static void metaInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
 
     modCommInfo comm;
     comm.nranks = info->comm->nRanks;
-    comm.nnodes = atoi(getenv("N_MPI_RANKS")); // should be set by application!
-    comm.mynode = atoi(getenv("MY_MPI_RANK")); // should be set by application!
+    comm.nnodes = MOD_N_NODES; // should be set by application!
+    comm.mynode = MOD_MY_NODE; // should be set by application!
     comm.nrankpernode = comm.nranks / comm.nnodes;
     assert(comm.nranks % comm.nnodes == 0);
 
@@ -306,8 +319,8 @@ static void sendrecvInit(modCoordinator *coordinator, modTopology *topology) {
 
 ncclResult_t modCoordinatorInit(modCoordinator *coordinator,
                                 ncclProxyOp *proxyOp, ncclInfo *info) {
-  getKernelBypass();
-  if (KERNEL_BYPASS == 1) {
+  LOG_MOD(NCCL_MOD, "modCoordinatorInit kbypass=%d", MOD_KERNEL_BYPASS);
+  if (MOD_KERNEL_BYPASS == 1) {
     metaInit(coordinator, proxyOp, info);
     int count = coordinator->task.count;
     assert(count == info->count);
@@ -320,7 +333,7 @@ ncclResult_t modCoordinatorInit(modCoordinator *coordinator,
             "modCoordinatorInit: kbypass=%d, count=%d, nranks=%d, myrank=%d, "
             "nchannels=%d, "
             "nthreads=%d",
-            KERNEL_BYPASS, count, nranks, myrank, nchannels, nthreads);
+            MOD_KERNEL_BYPASS, count, nranks, myrank, nchannels, nthreads);
     sendrecvInit(coordinator, &global_topology);
   }
   return ncclSuccess;
@@ -381,8 +394,8 @@ ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid,
 
 ncclResult_t modTopologyInit(modTopology *topology, ncclProxyOp *proxyOp,
                              ncclInfo *info) {
-  getKernelBypass();
-  if (KERNEL_BYPASS == 1) {
+  LOG_MOD(NCCL_MOD, "modTopologyInit kbypass=%d", MOD_KERNEL_BYPASS);
+  if (MOD_KERNEL_BYPASS == 1) {
     ncclComm *comm = info->comm;
     int nranks = comm->nRanks;
     int myrank = comm->rank;
@@ -392,8 +405,7 @@ ncclResult_t modTopologyInit(modTopology *topology, ncclProxyOp *proxyOp,
     if ((topology->init & topoInitState::META_INITED) == 0) {
 
       topology->nranks = nranks;
-      topology->nnodes =
-          atoi(getenv("N_MPI_RANKS")); // should be set by application!
+      topology->nnodes = MOD_N_NODES; // should be set by application!
       topology->nrankpernode = topology->nranks / topology->nnodes;
       assert(topology->nranks % topology->nnodes == 0);
       topology->init =
@@ -440,7 +452,7 @@ ncclResult_t modTopologyDestroy(modTopology *topology) {
 NCCL_API(ncclResult_t, ncclModSync);
 
 ncclResult_t ncclModSync() {
-  if (KERNEL_BYPASS) {
+  if (MOD_KERNEL_BYPASS) {
     LOG_MOD(NCCL_MOD, "ncclModSync");
     while (global_coordinator.done == 0) {
       usleep(100);

@@ -1094,7 +1094,7 @@ ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan
     launchConfig.numAttrs = attrs;
     launchConfig.stream = launchStream;
 //! comment cudaLaunchKernelExc
-    if (KERNEL_BYPASS) {
+    if (MOD_KERNEL_BYPASS) {
       LOG_MOD(NCCL_MOD, "bypass kernel launch exc");
     } else {
       CUDACHECK(cudaLaunchKernelExC(&launchConfig, fn, args));
@@ -1104,10 +1104,10 @@ ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan
   #endif
   // Standard kernel launch
   //! comment cudaLaunchKernel
-  if (KERNEL_BYPASS) {
-      LOG_MOD(NCCL_MOD, "bypass kernel launch");
+  if (MOD_KERNEL_BYPASS) {
+    LOG_MOD(NCCL_MOD, "bypass kernel launch");
   } else {
-  CUDACHECK(cudaLaunchKernel(fn, grid, block, args, smem, launchStream));
+    CUDACHECK(cudaLaunchKernel(fn, grid, block, args, smem, launchStream));
   }
   return ncclSuccess;
 }

@@ -1364,6 +1364,8 @@ fail:
 
 static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
   LOG_MOD(NCCL_MOD, "nccl comm init rank func");
+  NCCLCHECK(modGetAllEnvVars());
+
   struct ncclCommInitRankAsyncJob* job = (struct ncclCommInitRankAsyncJob*)job_;
   ncclComm_t comm = job->comm;
   ncclResult_t res = ncclSuccess;

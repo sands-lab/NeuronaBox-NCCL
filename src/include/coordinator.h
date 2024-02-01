@@ -5,8 +5,11 @@
 #include "proxy.h"
 #include <map>
 #include <vector>
-extern int KERNEL_BYPASS;
 
+// env vars
+extern int MOD_KERNEL_BYPASS;
+extern int MOD_N_NODES;
+extern int MOD_MY_NODE;
 // channel represents a connection between two ranks
 struct modChannelInfo {
   int bid;
@@ -87,6 +90,8 @@ struct modTopology {
 
 extern modCoordinator global_coordinator;
 extern modTopology global_topology;
+
+ncclResult_t modGetAllEnvVars();
 
 ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp* proxyOp, ncclInfo* info);
 

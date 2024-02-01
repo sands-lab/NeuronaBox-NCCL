@@ -1177,16 +1177,16 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
         //! if (sizesFifo[buffSlot] != -1 && ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL))
         bool cond = sizesFifo[buffSlot] != -1 && ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL);
         int size = 0;
-        if (KERNEL_BYPASS) {
+        if (MOD_KERNEL_BYPASS) {
           modCoordinatorGetSendSize(&global_coordinator, sub->channelId, size);
         }
-        if ((KERNEL_BYPASS && size != -1) || (!KERNEL_BYPASS && cond)) {
+        if ((MOD_KERNEL_BYPASS && size != -1) || (!MOD_KERNEL_BYPASS && cond)) {
           // We have something to receive, let's check if it's completely ready.
 
           //! we need to set the size properly, but according to kernel
           //! the size is nelts * sizeof(T)
           //! suppose we use float32, and ne
-          if (!KERNEL_BYPASS) {
+          if (!MOD_KERNEL_BYPASS) {
             size = sizesFifo[buffSlot];
           }
           bool shared = (p == NCCL_PROTO_SIMPLE) && resources->shared;
@@ -1222,7 +1222,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
               LOG_MOD(NCCL_MOD,
                       "sub%d:chan%d in send proxy progress, size is %d", s,
                       sub->channelId, size);
-              if (KERNEL_BYPASS) {
+              if (MOD_KERNEL_BYPASS) {
                 modCoordinatorSend(&global_coordinator, sub->channelId, size);
               }
               TRACE(NCCL_NET, "sendProxy [%ld/%d] Isend posted, req %p", sub->transmitted, buffSlot, sub->requests[buffSlot]);
@@ -1392,7 +1392,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
             struct ncclProxySubArgs *sub = subGroup + i;
             LOG_MOD(NCCL_MOD, "sub%d:chan%d, size is %d", s + i, sub->channelId,
                     sizes[i]);
-            if (KERNEL_BYPASS) {
+            if (MOD_KERNEL_BYPASS) {
               modCoordinatorRecv(&global_coordinator, sub->channelId, sizes[i]);
             }
             sub->received += args->sliceSteps;
@@ -1476,7 +1476,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
           struct recvNetResources* resources = (struct recvNetResources*) (sub->connection->transportResources);
           volatile uint64_t* sendHead = &resources->sendMem->head;
           uint64_t done = *sendHead;
-          bool left_cond = KERNEL_BYPASS || (done > sub->base + sub->done);
+          bool left_cond = MOD_KERNEL_BYPASS || (done > sub->base + sub->done);
           //! while done > sub->base + sub->done &&     sub->transmitted > sub->done)
           //! here we need to modify done=*sendHead, which should be modified by kernel!
               // LL and LL128 can acknowledge 0-bytes send before they even happen. Don't go past what we transmitted.
