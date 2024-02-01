@@ -24,6 +24,7 @@ ncclResult_t modGetAllEnvVars() {
     return ncclModError;
   } else {
     MOD_N_NODES = atoi(env);
+    LOG_MOD(NCCL_MOD, "N_MPI_RANKS=%d", MOD_N_NODES);
   }
   env = getenv("MY_MPI_RANK");
   if (env == NULL) {
@@ -31,6 +32,7 @@ ncclResult_t modGetAllEnvVars() {
     return ncclModError;
   } else {
     MOD_MY_NODE = atoi(env);
+    LOG_MOD(NCCL_MOD, "MY_MPI_RANK=%d", MOD_MY_NODE);
   }
   env = getenv("NCCL_MOD_KERNEL_BYPASS");
   if (env == NULL) {
@@ -38,6 +40,7 @@ ncclResult_t modGetAllEnvVars() {
     MOD_KERNEL_BYPASS = 0;
   } else {
     MOD_KERNEL_BYPASS = atoi(env);
+    LOG_MOD(NCCL_MOD, "NCCL_MOD_KERNEL_BYPASS=%d", MOD_KERNEL_BYPASS);
   }
   return ncclSuccess;
 }
@@ -280,6 +283,8 @@ static void metaInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
 }
 
 static void sendrecvInit(modCoordinator *coordinator, modTopology *topology) {
+  LOG_MOD(NCCL_MOD, "sendrecvInit, myranks.size=%lu, nrankpernode=%d",
+          topology->myranks.size(), topology->nrankpernode);
   if (topology->myranks.size() < topology->nrankpernode) {
     return;
   }
@@ -298,11 +303,11 @@ static void sendrecvInit(modCoordinator *coordinator, modTopology *topology) {
     auto next = topology->next[i];
     LOG_MOD(NCCL_MOD, "rank=%d, prev=%d, next=%d, ismynode[rank]=%d", i, prev,
             next, (int)ismynode[i]);
-    if (ismynode[prev] && !ismynode[next]) {
+    if (!ismynode[next]) {
       assert(coordinator->sendrank == -1);
       coordinator->sendrank = i;
     }
-    if (!ismynode[prev] && ismynode[next]) {
+    if (!ismynode[prev]) {
       assert(coordinator->recvrank == -1);
       coordinator->recvrank = i;
     }
