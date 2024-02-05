@@ -181,7 +181,10 @@ static ncclResult_t doLaunches(struct ncclComm* head) {
     cliqueHead = cliqueNextHead;
   } while (cliqueHead != nullptr);
   LOG_MOD(NCCL_MOD, "do launches finished!");
-
+  if (MOD_KERNEL_BYPASS) {
+    NCCLCHECK(ncclModSync());
+    LOG_MOD(NCCL_MOD, "nccl kernel launch success and synced");
+  }
 failure:
   return result;
 }
@@ -427,10 +430,6 @@ ncclResult_t ncclGroupEndInternal() {
       NCCLCHECKGOTO(groupLaunch(&ncclGroupJobMainPtr->base), ret, fail);
       groupResetJobState(ncclGroupJobMainPtr);
     }
-  }
-  if (MOD_KERNEL_BYPASS) {
-    NCCLCHECK(ncclModSync());
-    LOG_MOD(NCCL_MOD, "nccl kernel launch success and synced");
   }
 exit:
   return ret;
