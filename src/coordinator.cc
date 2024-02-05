@@ -18,15 +18,15 @@ modTopology global_topology;
 
 ncclResult_t modGetAllEnvVars() {
   LOG_MOD(NCCL_MOD, "modGetAllEnvVars");
-  char *env = getenv("N_MPI_RANKS");
+  char *env = getenv("MOD_N_MPI_RANKS");
   if (env == NULL) {
     LOG_MOD(NCCL_LOG_ABORT, "Error: N_MPI_RANKS not set");
     return ncclModError;
   } else {
     MOD_N_NODES = atoi(env);
-    LOG_MOD(NCCL_MOD, "N_MPI_RANKS=%d", MOD_N_NODES);
+    LOG_MOD(NCCL_MOD, "MOD_N_MPI_RANKS=%d", MOD_N_NODES);
   }
-  env = getenv("MY_MPI_RANK");
+  env = getenv("MOD_MY_MPI_RANK");
   if (env == NULL) {
     LOG_MOD(NCCL_LOG_ABORT, "Error: MY_MPI_RANK not set");
     return ncclModError;
@@ -34,13 +34,13 @@ ncclResult_t modGetAllEnvVars() {
     MOD_MY_NODE = atoi(env);
     LOG_MOD(NCCL_MOD, "MY_MPI_RANK=%d", MOD_MY_NODE);
   }
-  env = getenv("NCCL_MOD_KERNEL_BYPASS");
+  env = getenv("MOD_KERNEL_BYPASS");
   if (env == NULL) {
-    LOG_MOD(NCCL_MOD, "NCCL_MOD_KERNEL_BYPASS not set, default to 0");
+    LOG_MOD(NCCL_MOD, "MOD_KERNEL_BYPASS not set, default to 0");
     MOD_KERNEL_BYPASS = 0;
   } else {
     MOD_KERNEL_BYPASS = atoi(env);
-    LOG_MOD(NCCL_MOD, "NCCL_MOD_KERNEL_BYPASS=%d", MOD_KERNEL_BYPASS);
+    LOG_MOD(NCCL_MOD, "MOD_KERNEL_BYPASS=%d", MOD_KERNEL_BYPASS);
   }
   return ncclSuccess;
 }
@@ -293,8 +293,8 @@ static void sendrecvInit(modCoordinator *coordinator, modTopology *topology) {
   for (int i = 0; i < topology->nranks; ++i) {
     ismynode[i] = false;
   }
-  for (int i = 0; i < topology->myranks.size(); ++i) {
-    ismynode[topology->myranks[i]] = true;
+  for (auto i : topology->myranks) {
+    ismynode[i] = true;
   }
   coordinator->sendrank = -1;
   coordinator->recvrank = -1;
@@ -405,7 +405,8 @@ ncclResult_t modTopologyInit(modTopology *topology, ncclProxyOp *proxyOp,
     int nranks = comm->nRanks;
     int myrank = comm->rank;
     int nchannels = info->nChannels;
-    LOG_MOD(NCCL_MOD, "modTopologyInit %d, ringmapsize=%lu, inited:%d", myrank,
+    LOG_MOD(NCCL_MOD,
+            "modTopologyInit for rank: %d, ringmapsize=%lu, inited:%d", myrank,
             topology->ringmap.size(), topology->init);
     if ((topology->init & topoInitState::META_INITED) == 0) {
 
@@ -418,11 +419,12 @@ ncclResult_t modTopologyInit(modTopology *topology, ncclProxyOp *proxyOp,
     }
     if ((topology->init & topoInitState::PER_CALL_INITED) == 0) {
       topology->nchannels = nchannels;
-      topology->myranks = vector<int>();
+      topology->myranks.clear();
       topology->init =
           (topoInitState)(topology->init | topoInitState::PER_CALL_INITED);
+      LOG_MOD(NCCL_MOD, "Myranks cleared!");
     }
-    topology->myranks.push_back(myrank);
+    topology->myranks.insert(myrank);
   }
   return ncclSuccess;
 }
@@ -457,11 +459,12 @@ ncclResult_t modTopologyDestroy(modTopology *topology) {
 NCCL_API(ncclResult_t, ncclModSync);
 
 ncclResult_t ncclModSync() {
+  LOG_MOD(NCCL_MOD, "ncclModSync Called");
   if (MOD_KERNEL_BYPASS) {
-    LOG_MOD(NCCL_MOD, "ncclModSync");
     while (global_coordinator.done == 0) {
-      usleep(100);
+      sched_yield();
     }
+    LOG_MOD(NCCL_MOD, "ncclModSync Done");
     modCoordinatorDestroy(&global_coordinator);
     modTopologyDestroy(&global_topology);
   }

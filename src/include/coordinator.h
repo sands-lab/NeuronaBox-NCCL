@@ -4,6 +4,7 @@
 #include "nccl.h"
 #include "proxy.h"
 #include <map>
+#include <set>
 #include <vector>
 
 // env vars
@@ -81,7 +82,7 @@ struct modTopology {
   int nchannels;
 
   // ranks in this node
-  std::vector<int> myranks;
+  std::set<int> myranks;
   std::map<int, int> prev;
   std::map<int, int> next;
   // <rank, channel> -> <ringIndex>

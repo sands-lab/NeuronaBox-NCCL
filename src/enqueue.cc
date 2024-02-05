@@ -1095,7 +1095,7 @@ ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan
     launchConfig.stream = launchStream;
 //! comment cudaLaunchKernelExc
     if (MOD_KERNEL_BYPASS) {
-      LOG_MOD(NCCL_MOD, "bypass kernel launch exc");
+      LOG_MOD(NCCL_MOD, "bypass kernel launch exc define");
     } else {
       CUDACHECK(cudaLaunchKernelExC(&launchConfig, fn, args));
     }
