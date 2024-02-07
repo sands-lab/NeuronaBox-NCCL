@@ -143,10 +143,10 @@ class Primitives<
     if (flags & (Recv*RoleWaitRecv | Send*RoleWaitSend)) {
       if (isSendNotRecv && (flags & SizesFifoEnabled)) {
         connSizesFifoPtr[step%NCCL_STEPS] = nelts*sizeof(T);
-        printf("[tid=%d] WaitPeer, step=%lu, offset=%d, nelts=%d, "
-               "sizeof<T>=%lu, coonSziesFifoPtr[%lu]=%d\n",
-               tid, step, offset, nelts, sizeof(T), step % NCCL_STEPS,
-               connSizesFifoPtr[step % NCCL_STEPS]);
+        // printf("[tid=%d] WaitPeer, step=%lu, offset=%d, nelts=%d, "
+        //        "sizeof<T>=%lu, coonSziesFifoPtr[%lu]=%d\n",
+        //        tid, step, offset, nelts, sizeof(T), step % NCCL_STEPS,
+        //        connSizesFifoPtr[step % NCCL_STEPS]);
       }
 
       void **ptrs = isSendNotRecv ? (ncclShmem.groups[group].dsts + Dst)
@@ -200,9 +200,11 @@ class Primitives<
 
     nelem = nelem < 0 ? 0 : nelem;
     int sliceSize = stepSize*StepPerSlice;
-    if (tid == 0) {
-      printf("[tid=%d] nelem=%d, sliceSize=%d, stepSize=%d, StepPerSlice=%d SlicePerChunk%d\n", tid, nelem, sliceSize, stepSize, StepPerSlice, SlicePerChunk);
-    }
+    // if (tid == 0) {
+    //   printf("[tid=%d] nelem=%d, sliceSize=%d, stepSize=%d, StepPerSlice=%d
+    //   SlicePerChunk%d\n", tid, nelem, sliceSize, stepSize, StepPerSlice,
+    //   SlicePerChunk);
+    // }
     sliceSize = max(divUp(nelem, 16*SlicePerChunk)*16, sliceSize/32);
     int slice = 0;
     int offset = 0;
@@ -243,10 +245,11 @@ class Primitives<
 #endif
       do {
         sliceSize = sliceSize < nelem - offset ? sliceSize : nelem - offset;
-        if (tid == 8) {
-          printf("[tid=%d] sliceSize=%d, nelem=%d, offset=%d, slice=%d, sliceperchunk%d\n", tid, sliceSize,
-                 nelem, offset, slice, SlicePerChunk);
-        }
+        // if (tid == 8) {
+        //   printf("[tid=%d] sliceSize=%d, nelem=%d, offset=%d, slice=%d,
+        //   sliceperchunk%d\n", tid, sliceSize,
+        //          nelem, offset, slice, SlicePerChunk);
+        // }
         if (Src && (flags & (SrcBuf == Input ? RoleInput : RoleOutput)))
           ncclShmem.groups[group].srcs[0] = userBuff + srcIx + offset;
         if (Dst && (flags & (DstBuf == Input ? RoleInput : RoleOutput)))
@@ -416,14 +419,15 @@ class Primitives<
       auto *conn = &peer->recv[connIndex];
       if (conn->netDeviceHandle.netDeviceType == NCCL_NET_DEVICE_UNPACK) {
         // handle must be a device ptr
-        printf("NCCL_NET_DEVICE_UNPACK for tid = %d", tid);
+        // printf("NCCL_NET_DEVICE_UNPACK for tid = %d", tid);
         netDeviceHandle = conn->netDeviceHandle.handle;
         // Cache the handle
         ncclNetDeviceUnpackSetup(netDeviceHandle, group, index);
         flags |= NetDeviceUnpack;
       }
       step = conn->step;
-      printf("[tid %d]:loadRecvConn tail=%p, head=%p, buff[simple]=%p\n", tid, conn->tail, conn->head, conn->buffs[NCCL_PROTO_SIMPLE]);
+      // printf("[tid %d]:loadRecvConn tail=%p, head=%p, buff[simple]=%p\n",
+      // tid, conn->tail, conn->head, conn->buffs[NCCL_PROTO_SIMPLE]);
 
       step = roundUp(step, SlicePerChunk*StepPerSlice);
       if (flags & RolePostRecv) {
@@ -469,8 +473,9 @@ class Primitives<
     if (flags & (RoleWaitSend|RolePostSend)) {
       auto *conn = &peer->send[connIndex];
       step = conn->step;
-      printf("[tid %d]:loadSendConn tail=%p, head=%p, buff[simple]=%p\n", tid, conn->tail, conn->head, conn->buffs[NCCL_PROTO_SIMPLE]);
-      
+      // printf("[tid %d]:loadSendConn tail=%p, head=%p, buff[simple]=%p\n",
+      // tid, conn->tail, conn->head, conn->buffs[NCCL_PROTO_SIMPLE]);
+
       step = roundUp(step, SlicePerChunk*StepPerSlice);
       if (flags & RolePostSend) {
         connStepPtr = conn->tail;
@@ -523,13 +528,15 @@ class Primitives<
     ):
     tid(tid), nthreads(nthreads), tidInBlock(threadIdx.x), group(group),
     stepSize(stepSize_ == 0 ? ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE]/NCCL_STEPS/sizeof(T) : stepSize_) {
-    if (tid == 0) {
-      printf("At primitives init: nthreads=%d, tid=%d, tidInBlk=%d, group=%d, "
-             "stepsize_=%d, bufsize=%d, ncclstep=%d\n",
-             nthreads, tid, tidInBlock, group, stepSize_,
-             ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE], NCCL_STEPS);
-    }
-    // For send operations, we need an extra warp to overlap the threadfence and the copy
+    // if (tid == 0) {
+    //   printf("At primitives init: nthreads=%d, tid=%d, tidInBlk=%d, group=%d,
+    //   "
+    //          "stepsize_=%d, bufsize=%d, ncclstep=%d\n",
+    //          nthreads, tid, tidInBlock, group, stepSize_,
+    //          ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE], NCCL_STEPS);
+    // }
+    // For send operations, we need an extra warp to overlap the threadfence and
+    // the copy
     this->nworkers = nthreads - (MaxSend > 0 && nthreads-WARP_SIZE >= 64 ? WARP_SIZE : 0);
 
     int nrecv=0, nsend=0;
