@@ -195,10 +195,10 @@ __device__ void ncclKernelMain(struct ncclDevComm* comm, uint64_t channelMask, s
       }
       SpecializedRunWork().run(&ncclShmem.work);
     } else {
-      if (tid == 0) {
-        printf("Using generic kernel id = %d\n",
-               ncclShmem.work.header.funcIndex);
-      }
+      // if (tid == 0) {
+      //   printf("Using generic kernel id = %d\n",
+      //          ncclShmem.work.header.funcIndex);
+      // }
       ncclDevFuncTable[ncclShmem.work.header.funcIndex]();
     }
 

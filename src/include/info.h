@@ -60,6 +60,9 @@ struct ncclInfo {
   int nchunksPerLoop;
   int chunkSize;
   int channelId;
+
+  //! emu
+  uint64_t unique_id;
 };
 
 inline ncclResult_t ncclInfoSetDerived(struct ncclInfo* info, int nRanks) {
