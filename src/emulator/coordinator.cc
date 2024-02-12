@@ -1,4 +1,4 @@
-#include "coordinator.h"
+#include "emulator/coordinator.h"
 #include "align.h"
 #include "comm.h"
 #include <assert.h>

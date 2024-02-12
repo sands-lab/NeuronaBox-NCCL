@@ -6,8 +6,8 @@
 
 #include "group.h"
 #include "channel.h"
-#include "coordinator.h"
 #include "debug.h"
+#include "emulator/coordinator.h"
 #include "enqueue.h"
 #include "include/debug.h"
 #include "include/nccl_common.h"

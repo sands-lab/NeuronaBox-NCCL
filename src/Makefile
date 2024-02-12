@@ -10,10 +10,11 @@ include ../makefiles/version.mk
 INCEXPORTS  := nccl.h nccl_net.h
 LIBSRCFILES := \
 	bootstrap.cc channel.cc collectives.cc debug.cc enqueue.cc group.cc \
-	init.cc init_nvtx.cc net.cc proxy.cc transport.cc coordinator.cc\
+	init.cc init_nvtx.cc net.cc proxy.cc transport.cc \
 	$(wildcard graph/*.cc) \
 	$(wildcard misc/*.cc) \
-	$(wildcard transport/*.cc)
+	$(wildcard transport/*.cc) \
+	$(wildcard emulator/*.cc) 
 
 ##### lib files
 LIBNAME     := libnccl.so

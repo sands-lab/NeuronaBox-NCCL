@@ -8,7 +8,7 @@
 #include "bootstrap.h"
 #include "channel.h"
 #include "coll_net.h"
-#include "coordinator.h"
+#include "emulator/coordinator.h"
 #include "enqueue.h"
 #include "gdrwrap.h"
 #include "graph.h"

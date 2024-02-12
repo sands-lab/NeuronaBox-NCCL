@@ -4,16 +4,16 @@
  * See LICENSE.txt for license information
  ************************************************************************/
 
-#include "comm.h"
 #include "net.h"
-#include "graph.h"
-#include "proxy.h"
 #include "collectives.h"
+#include "comm.h"
+#include "emulator/coordinator.h"
 #include "gdrwrap.h"
-#include "shm.h"
+#include "graph.h"
 #include "p2p.h"
 #include "profiler.h"
-#include "coordinator.h"
+#include "proxy.h"
+#include "shm.h"
 #include <chrono>
 
 static_assert(sizeof(ncclNetHandle_t) <= CONNECT_SIZE, "NET Connect info is too large");

@@ -10,13 +10,13 @@
 #include "channel.h"
 #include "coll_net.h"
 #include "cudawrap.h"
+#include "emulator/coordinator.h"
 #include "gdrwrap.h"
 #include "include/debug.h"
 #include "include/nccl_common.h"
 #include "transport.h"
-#include "coordinator.h"
-#include <cstring> // std::memcpy
 #include <cinttypes> // PRIx64
+#include <cstring>   // std::memcpy
 
 enum ncclRegBufferType {
   NCCL_REGULAR_BUFFER = 0,
