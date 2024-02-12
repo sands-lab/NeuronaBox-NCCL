@@ -200,6 +200,9 @@ struct ncclKernelPlan {
     struct ncclIntruQueue<struct ncclWorkList, &ncclWorkList::next> workQueue;
     struct ncclIntruQueue<struct ncclProxyOp, &ncclProxyOp::enqNext> proxyOpQueue;
   } channels[MAXCHANNELS];
+
+  //! emu
+  uint64_t unique_id;
 };
 
 struct ncclRegRequest {

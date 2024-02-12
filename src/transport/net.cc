@@ -7,7 +7,7 @@
 #include "net.h"
 #include "collectives.h"
 #include "comm.h"
-#include "emulator/coordinator.h"
+#include "emulator.h"
 #include "gdrwrap.h"
 #include "graph.h"
 #include "p2p.h"
@@ -1109,7 +1109,7 @@ static_assert(NCCL_STEPS <= NCCL_NET_MAX_REQUESTS, "Not enough net requests to c
 static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
                                       struct ncclProxyArgs *args) {
   if (args->state == ncclProxyOpReady) {
-    LOG_MOD(NCCL_MOD, "send proxy progress op ready");
+    LOG_MOD(NCCL_MOD, "send proxy progress op ready, red op = %d", args->redOp);
     for (int s = 0; s < args->nsubs; s++) {
       struct ncclProxySubArgs *sub = args->subs + s;
       struct sendNetResources *resources =
@@ -1124,16 +1124,22 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
   }
   args->idle = 1;
   if (args->state == ncclProxyOpProgress) {
+    int unique_id = args->unique_id;
+    int bypass = 0;
+    modBypassCheck(&global_controller, unique_id, bypass);
+    LOG_MOD(NCCL_MOD, "send proxy progress unique_id = %d, bypass = %d",
+            unique_id, bypass);
     int p = args->protocol;
     int maxDepth = std::min(NCCL_STEPS, NCCL_SHARED_STEPS/args->nsubs);
     for (int s=0; s<args->nsubs; s++) {
       struct ncclProxySubArgs* sub = args->subs+s;
       if (sub->done == sub->nsteps) continue;
       LOG_MOD(NCCL_MOD,
-              "sub%d, base%lu, posted%lu, transmitted%lu, done%lu, nbytes%lu, "
-              "maxDepth%d, chid=%d\n",
-              s, sub->base, sub->posted, sub->transmitted, sub->done,
-              sub->nbytes, maxDepth, sub->channelId);
+              "[%d;%d]sub%d, base%lu, posted%lu, transmitted%lu, done%lu, "
+              "nbytes%lu, "
+              "maxDepth%d, chid=%d, nsteps%d",
+              unique_id, bypass, s, sub->base, sub->posted, sub->transmitted,
+              sub->done, sub->nbytes, maxDepth, sub->channelId, sub->nsteps);
       struct sendNetResources* resources = (struct sendNetResources*) (sub->connection->transportResources);
       void* mhandle = resources->mhandles[p];
       int stepSize = resources->buffSizes[p] / NCCL_STEPS;
@@ -1169,24 +1175,37 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
         int buffSlot = (sub->base+sub->transmitted)%NCCL_STEPS;
         volatile int* sizesFifo = resources->recvMem->sizesFifo;
         volatile uint64_t* recvTail = &resources->recvMem->tail;
-        //! mod here, recvMem is accessble on GPU side, kernel will modify that tail to indicate the data is ready
-        //! Since we do the "kernel-bypass", skip the if statement, so that, the data is always ready.😄
-        //! we cannot directly skip the if statement, as we need to make sure
-        //! the recv proxy has already received the data, which means the real nccl part has
-        //! finished its work, so we need to access the coordinator to get the real tail 
-        //! if (sizesFifo[buffSlot] != -1 && ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL))
-        bool cond = sizesFifo[buffSlot] != -1 && ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL);
+        //! mod here, recvMem is accessble on GPU side, kernel will modify that
+        //! tail to indicate the data is ready Since we do the "kernel-bypass",
+        //! skip the if statement, so that, the data is always ready.😄 we
+        //! cannot directly skip the if statement, as we need to make sure the
+        //! recv proxy has already received the data, which means the real nccl
+        //! part has finished its work
+        //! if (sizesFifo[buffSlot] != -1 &&
+        //! ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL))
+        int bypassed = 0;
+        NCCLCHECK(modProxyBypassedSend(&global_controller, unique_id,
+                                       sub->channelId, bypassed));
+        uint64_t done = *recvTail + bypassed;
+        bool cond =
+            sizesFifo[buffSlot] != -1 &&
+            ((done > (sub->base + sub->transmitted)) || p == NCCL_PROTO_LL);
         int size = 0;
-        if (MOD_KERNEL_BYPASS) {
-          modCoordinatorGetSendSize(&global_coordinator, sub->channelId, size);
+        LOG_MOD(NCCL_MOD,
+                "[%d;%d]send sizesFifo[%d] = %d, recvTail + bypassed = %ld, "
+                "addr = %p, "
+                "base = %d, "
+                "transmitted = %d, bypass = %d, cond = %d",
+                unique_id, bypass, buffSlot, sizesFifo[buffSlot], done,
+                recvTail, sub->base, sub->transmitted, bypass, cond);
+        if (bypass) {
+          modProxyGetSendSize(&global_controller, unique_id, sub->channelId,
+                              size);
         }
-        if ((MOD_KERNEL_BYPASS && size != -1) || (!MOD_KERNEL_BYPASS && cond)) {
+        if ((bypass && size != -1) || (!bypass && cond)) {
           // We have something to receive, let's check if it's completely ready.
 
-          //! we need to set the size properly, but according to kernel
-          //! the size is nelts * sizeof(T)
-          //! suppose we use float32, and ne
-          if (!MOD_KERNEL_BYPASS) {
+          if (!bypass) {
             size = sizesFifo[buffSlot];
           }
           bool shared = (p == NCCL_PROTO_SIMPLE) && resources->shared;
@@ -1220,13 +1239,16 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
             NCCLCHECK(proxyState->ncclNet->isend(resources->netSendComm, buff, size, resources->tpRank, mhandle, sub->requests+buffSlot));
             if (sub->requests[buffSlot] != NULL) {
               LOG_MOD(NCCL_MOD,
-                      "sub%d:chan%d in send proxy progress, size is %d", s,
-                      sub->channelId, size);
-              if (MOD_KERNEL_BYPASS) {
-                modCoordinatorSend(&global_coordinator, sub->channelId, size);
+                      "[%d;%d]sub%d:chan%d in send proxy progress, size is %d",
+                      unique_id, bypass, s, sub->channelId, size);
+              if (bypass) {
+                modProxySend(&global_controller, unique_id, sub->channelId,
+                             size);
               }
               TRACE(NCCL_NET, "sendProxy [%ld/%d] Isend posted, req %p", sub->transmitted, buffSlot, sub->requests[buffSlot]);
-              sizesFifo[buffSlot] = -1;
+              if (!bypass) {
+                sizesFifo[buffSlot] = -1;
+              }
               // Make sure size is reset to zero before we update the head.
               __sync_synchronize();
               sub->transmitted += args->sliceSteps;
@@ -1256,18 +1278,25 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
           if (sub->done == sub->nsteps) {
             resources->step = sub->base + sub->nsteps;
             args->done++;
+            if (bypass) {
+              // resources->recvMem->tail += sub->nsteps;
+              modProxySendDone(&global_controller, unique_id, sub->channelId,
+                               sub->nsteps);
+            }
             LOG_MOD(NCCL_MOD,
-                    "send proxy progress, args->done = %d for sub %d, "
-                    "args->nsubs = %d\n",
-                    args->done, s, args->nsubs);
+                    "[%d;%d]send done, args->done = %d for sub %d, "
+                    "args->nsubs = %d, step = %lu",
+                    unique_id, bypass, args->done, s, args->nsubs,
+                    resources->step);
           }
         }
       }
     }
     if (args->done == args->nsubs) {
       args->state = ncclProxyOpNone;
-      LOG_MOD(NCCL_MOD, "op all done, args->done = %d, args->nsubs = %d\n",
-              args->done, args->nsubs);
+      LOG_MOD(NCCL_MOD,
+              "[%d;%d]send all done, args->done = %d, args->nsubs = %d\n",
+              unique_id, bypass, args->done, args->nsubs);
     }
   }
   return ncclSuccess;
@@ -1275,13 +1304,15 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
 
 static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct ncclProxyArgs* args) {
   if (args->state == ncclProxyOpReady) {
-    LOG_MOD(NCCL_MOD, "recv proxy progress new op");
+    LOG_MOD(NCCL_MOD, "recv progress op ready, nsunbs = %d", args->nsubs);
     // Initialize subs and group them by same recvComm.
     void* recvComm;
     int groupSize = 0;
     int maxRecvs = 1;
     for (int s=0; s<args->nsubs; s++) {
       struct ncclProxySubArgs* sub = args->subs+s;
+      LOG_MOD(NCCL_MOD, "sub%d, nbytes%lu, nsteps%lu, channelid%d\n", s,
+              sub->nbytes, sub->nsteps, sub->channelId);
       if (groupSize == maxRecvs) {
         groupSize = 0;
       } else if (s>0) { // Find next sub with the same recvComm
@@ -1313,6 +1344,13 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
   }
   args->idle = 1;
   if (args->state == ncclProxyOpProgress) {
+
+    //! emu
+    int unique_id = args->unique_id;
+    int bypass = 0;
+    modBypassCheck(&global_controller, unique_id, bypass);
+    LOG_MOD(NCCL_MOD, "recv proxy progress unique_id = %d, bypass = %d",
+            unique_id, bypass);
     int p = args->protocol;
     int maxDepth = std::min(NCCL_STEPS, NCCL_SHARED_STEPS/args->nsubs);
     for (int s=0; s<args->nsubs; s+=args->subs[s].groupSize) {
@@ -1325,8 +1363,11 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
 
       for (int i=0; i<subGroup->groupSize; i++) {
         struct ncclProxySubArgs* sub = subGroup + i;
-        LOG_MOD(NCCL_MOD, "base%lu, posted%lu, transmitted%lu, done%lu, nbytes%lu,  maxDepth%d\n",
-              sub->base, sub->posted, sub->transmitted, sub->done, sub->nbytes,  maxDepth);
+        LOG_MOD(NCCL_MOD,
+                "[%d;%d]base%lu, posted%lu, transmitted%lu, done%lu, "
+                "nbytes%lu,  maxDepth%d, nsteps%d",
+                unique_id, bypass, sub->base, sub->posted, sub->transmitted,
+                sub->done, sub->nbytes, maxDepth, sub->nsteps);
         if (sub->posted < sub->nsteps) {
           if (sub->posted >= sub->done + maxDepth) { subCount = 0; break; }
           struct recvNetResources* resources = (struct recvNetResources*) (sub->connection->transportResources);
@@ -1382,18 +1423,21 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
         for (int i=0; i<NCCL_PROXY_MAX_SUBS; i++) sizes[i] = 0;
         NCCLCHECK(proxyState->ncclNet->test(
             subGroup->requests[step % NCCL_STEPS], &done, sizes));
+
         if (done) {
           int needFlush = 0;
           int totalSize = 0;
           for (int i=0; i<NCCL_PROXY_MAX_SUBS; i++) totalSize += sizes[i];
           //! mod here, we need to inc recv pointer after recv something
-          LOG_MOD(NCCL_MOD, "recv consumed, totalSize is %d", totalSize);
+          LOG_MOD(NCCL_MOD, "[%d;%d]recv consumed, totalSize is %d", unique_id,
+                  bypass, totalSize);
           for (int i = 0; i < subGroup->groupSize; i++) {
             struct ncclProxySubArgs *sub = subGroup + i;
-            LOG_MOD(NCCL_MOD, "sub%d:chan%d, size is %d", s + i, sub->channelId,
-                    sizes[i]);
-            if (MOD_KERNEL_BYPASS) {
-              modCoordinatorRecv(&global_coordinator, sub->channelId, sizes[i]);
+            LOG_MOD(NCCL_MOD, "[%d;%d]sub%d:chan%d, size is %d", unique_id,
+                    bypass, s + i, sub->channelId, sizes[i]);
+            if (bypass) {
+              modProxyRecv(&global_controller, unique_id, sub->channelId,
+                           sizes[i]);
             }
             sub->received += args->sliceSteps;
             for (uint64_t step=sub->received-args->sliceSteps; step<sub->received; step++) ncclProfilingRecord(args, s+i, step, ncclProxyProfileRecvFlushWait);
@@ -1457,7 +1501,9 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
               struct recvNetResources* resources = (struct recvNetResources*) (sub->connection->transportResources);
               volatile uint64_t* recvTail = resources->gdcSync ? resources->gdcSync : &resources->recvMem->tail;
               *recvTail = sub->base + sub->transmitted;
-              //! why we touch recv tail here?
+              LOG_MOD(NCCL_MOD,
+                      "[%d;%d]recv proxy progress, *recvTail = %ld, addr = %p",
+                      unique_id, bypass, *recvTail, recvTail);
               if (resources->gdcSync) wc_store_fence(); // Flush out WC write
             }
           }
@@ -1475,8 +1521,21 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
         if (sub->transmitted > sub->done) {
           struct recvNetResources* resources = (struct recvNetResources*) (sub->connection->transportResources);
           volatile uint64_t* sendHead = &resources->sendMem->head;
-          uint64_t done = *sendHead;
-          bool left_cond = MOD_KERNEL_BYPASS || (done > sub->base + sub->done);
+          // uint64_t done = *sendHead;
+          //! mod here
+          int bypassed = 0;
+          NCCLCHECK(modProxyBypassedRecv(&global_controller, unique_id,
+                                         sub->channelId, bypassed));
+          uint64_t done = *sendHead + bypassed;
+          bool left_cond = bypass || (done > sub->base + sub->done);
+          LOG_MOD(NCCL_MOD,
+                  "[%d;%d]recv proxy progress, *sendhead + bypass = %lu, addr "
+                  "= %p, base = "
+                  "%lu, sub->done "
+                  "= %lu, "
+                  "transmitted = %lu, left_cond = %d",
+                  unique_id, bypass, done, sendHead, sub->base, sub->done,
+                  sub->transmitted, left_cond);
           //! while done > sub->base + sub->done &&     sub->transmitted > sub->done)
           //! here we need to modify done=*sendHead, which should be modified by kernel!
               // LL and LL128 can acknowledge 0-bytes send before they even happen. Don't go past what we transmitted.
@@ -1487,17 +1546,30 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
                 NCCLCHECK(proxyState->ncclNet->irecvConsumed(resources->netRecvComm, subGroup->recvRequestsSubCount, subGroup->recvRequestsCache[sub->done%NCCL_STEPS]));
               subGroup->recvRequestsCache[sub->done%NCCL_STEPS] = NULL;
             }
-            sub->done += args->sliceSteps;            
+            sub->done += args->sliceSteps;
+
             for (uint64_t step=sub->done-args->sliceSteps; step<sub->done; step++) ncclProfilingRecord(args, s+i, step, ncclProxyProfileEnd);
             args->idle = 0;
             if (sub->done == sub->nsteps) {
               struct recvNetResources* resources = (struct recvNetResources*) (sub->connection->transportResources);
               resources->step = sub->base + sub->nsteps;
+              if (bypass) {
+                LOG_MOD(NCCL_MOD,
+                        "[%d;%d]recv done bypass update, *sendhead = %lu += "
+                        "step = %lu",
+                        unique_id, bypass, resources->sendMem->head,
+                        sub->nsteps);
+                // resources->sendMem->head += sub->nsteps;
+                modProxyRecvDone(&global_controller, unique_id, sub->channelId,
+                                 sub->nsteps);
+              }
               args->done++;
-              LOG_MOD(
-                  NCCL_MOD,
-                  "recv proxy progress, args->done = %d, args->nsubs = %d\n",
-                  args->done, args->nsubs);
+              LOG_MOD(NCCL_MOD,
+                      "[%d;%d]recv done, args->done = %d, args->nsubs = %d, "
+                      "*sendhead = %lu, addr = %p, step = %lu",
+                      unique_id, bypass, args->done, args->nsubs,
+                      resources->sendMem->head, &resources->sendMem->head,
+                      resources->step);
               break;
             }
           }
@@ -1507,8 +1579,9 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
     if (args->done == args->nsubs) {
       args->state = ncclProxyOpNone;
       LOG_MOD(NCCL_MOD,
-              "recv proxy progress done, args->done = %d, args->nsubs = %d\n",
-              args->done, args->nsubs);
+              "[%d;%d]recv proxy progress done, args->done = %d, args->nsubs = "
+              "%d\n",
+              unique_id, bypass, args->done, args->nsubs);
     }
   }
   return ncclSuccess;

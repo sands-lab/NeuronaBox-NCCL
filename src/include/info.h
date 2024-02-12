@@ -96,6 +96,9 @@ struct ncclTaskColl {
   ncclDataType_t datatype;
   ncclDevRedOpFull op;
   int chunkSteps, sliceSteps;
+
+  //! emu
+  uint64_t unique_id;
 };
 struct ncclTaskP2p {
   ncclTaskP2p *next;

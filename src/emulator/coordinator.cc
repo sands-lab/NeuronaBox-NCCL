@@ -1,6 +1,7 @@
-#include "emulator/coordinator.h"
 #include "align.h"
 #include "comm.h"
+#include "driver_types.h"
+#include "emulator.h"
 #include <assert.h>
 #include <cinttypes>
 #include <map>
@@ -8,42 +9,6 @@
 #include <stdlib.h>
 #include <string>
 using namespace std;
-
-int MOD_KERNEL_BYPASS = -1;
-int MOD_N_NODES = -1;
-int MOD_MY_NODE = -1;
-modCoordinator global_coordinator;
-
-modTopology global_topology;
-
-ncclResult_t modGetAllEnvVars() {
-  LOG_MOD(NCCL_MOD, "modGetAllEnvVars");
-  char *env = getenv("MOD_N_MPI_RANKS");
-  if (env == NULL) {
-    LOG_MOD(NCCL_LOG_ABORT, "Error: N_MPI_RANKS not set");
-    return ncclModError;
-  } else {
-    MOD_N_NODES = atoi(env);
-    LOG_MOD(NCCL_MOD, "MOD_N_MPI_RANKS=%d", MOD_N_NODES);
-  }
-  env = getenv("MOD_MY_MPI_RANK");
-  if (env == NULL) {
-    LOG_MOD(NCCL_LOG_ABORT, "Error: MY_MPI_RANK not set");
-    return ncclModError;
-  } else {
-    MOD_MY_NODE = atoi(env);
-    LOG_MOD(NCCL_MOD, "MY_MPI_RANK=%d", MOD_MY_NODE);
-  }
-  env = getenv("MOD_KERNEL_BYPASS");
-  if (env == NULL) {
-    LOG_MOD(NCCL_MOD, "MOD_KERNEL_BYPASS not set, default to 0");
-    MOD_KERNEL_BYPASS = 0;
-  } else {
-    MOD_KERNEL_BYPASS = atoi(env);
-    LOG_MOD(NCCL_MOD, "MOD_KERNEL_BYPASS=%d", MOD_KERNEL_BYPASS);
-  }
-  return ncclSuccess;
-}
 
 static void calc_size_inkernel(int nelem, vector<int> &res) {
   LOG_MOD(NCCL_MOD, "calc_size_inkernel: nelem=%d", nelem);
@@ -172,8 +137,8 @@ static void calc_recvsize_channel(int nranks, int myrank, int count,
 }
 
 static int check_done_ch(modChannelInfo &ch) {
-  if (ch.sendTail == ch.sendSizes.size() &&
-      ch.recvTail == ch.recvSizes.size()) {
+  if (ch.sendtail == ch.sendsizes.size() &&
+      ch.recvtail == ch.recvsizes.size()) {
     return 1;
   }
   return 0;
@@ -229,20 +194,20 @@ static void rankInit(modCoordinator *coordinator, int rank) {
   for (int i = 0; i < nchannels; ++i) {
     modChannelInfo ch;
     ch.bid = i;
-    ch.sendSizes = vector<int>();
-    ch.recvSizes = vector<int>();
+    ch.sendsizes = vector<int>();
+    ch.recvsizes = vector<int>();
     ch.send = rankinfo.send;
     ch.recv = rankinfo.recv;
     if (rankinfo.send) {
       calc_sendsize_channel(nranks, rankinfo.myrank, count, nchannels, i,
-                            nthreads, sizeof(float), ch.sendSizes);
+                            nthreads, sizeof(float), ch.sendsizes);
     }
     if (rankinfo.recv) {
       calc_recvsize_channel(nranks, rankinfo.myrank, count, nchannels, i,
-                            nthreads, sizeof(float), ch.recvSizes);
+                            nthreads, sizeof(float), ch.recvsizes);
     }
-    ch.sendTail = 0;
-    ch.recvTail = 0;
+    ch.sendtail = 0;
+    ch.recvtail = 0;
     rankinfo.channels.push_back(ch);
   }
 }
@@ -263,7 +228,7 @@ static void metaInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
     modTaskInfo task;
     task.count = info->count;
     task.tsize = sizeof(float);
-    task.primitive = 0;
+    task.coll = 0;
     task.reduceOp = 0;
     task.algo = 0;
     task.nchannels = info->nChannels;
@@ -358,11 +323,11 @@ ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int cid,
                                        int &size) {
   auto &ch = coordinator->ranks[coordinator->sendrank].channels[cid];
   auto &chrecv = coordinator->ranks[coordinator->recvrank].channels[cid];
-  if (ch.sendTail <= chrecv.recvTail) {
-    size = ch.sendSizes[ch.sendTail];
+  if (ch.sendtail <= chrecv.recvtail) {
+    size = ch.sendsizes[ch.sendtail];
   } else {
     size = -1;
-    LOG_MOD(NCCL_MOD, "sendTail=%d > recvTail=%d", ch.sendTail, ch.recvTail);
+    LOG_MOD(NCCL_MOD, "sendtail=%d > recvtail=%d", ch.sendtail, ch.recvtail);
   }
     LOG_MOD(NCCL_MOD, "modCoordinatorGetSendSize: size=%d", size);
     return ncclSuccess;
@@ -371,102 +336,43 @@ ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int cid,
 ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int cid,
                                 int size) {
   auto &ch = coordinator->ranks[coordinator->sendrank].channels[cid];
-  if (ch.sendSizes[ch.sendTail] == size) {
-    ch.sendTail++;
+  if (ch.sendsizes[ch.sendtail] == size) {
+    ch.sendtail++;
     update_done(coordinator);
   } else {
     LOG_MOD(NCCL_MOD, "send size unmatch actual: %d != expected: %d", size,
-            ch.sendSizes[ch.sendTail]);
+            ch.sendsizes[ch.sendtail]);
   }
-  LOG_MOD(NCCL_MOD, "modCoordinatorSend: size=%d, tail=%d", size, ch.sendTail);
+  LOG_MOD(NCCL_MOD, "modCoordinatorSend: size=%d, tail=%d", size, ch.sendtail);
   return ncclSuccess;
 }
 
 ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid,
                                 int size) {
   auto &ch = coordinator->ranks[coordinator->recvrank].channels[cid];
-  if (ch.recvSizes[ch.recvTail] == size) {
-    ch.recvTail++;
+  if (ch.recvsizes[ch.recvtail] == size) {
+    ch.recvtail++;
     update_done(coordinator);
   } else {
     LOG_MOD(NCCL_MOD, "recv size unmatch actual: %d != expected: %d", size,
-            ch.recvSizes[ch.recvTail]);
+            ch.recvsizes[ch.recvtail]);
   }
   LOG_MOD(NCCL_MOD, "modCoordinatorRecv: size=%d, recvtail=%d", size,
-          ch.recvTail);
+          ch.recvtail);
   return ncclSuccess;
 }
 
-ncclResult_t modTopologyInit(modTopology *topology, ncclProxyOp *proxyOp,
-                             ncclInfo *info) {
-  LOG_MOD(NCCL_MOD, "modTopologyInit kbypass=%d", MOD_KERNEL_BYPASS);
-  if (MOD_KERNEL_BYPASS == 1) {
-    ncclComm *comm = info->comm;
-    int nranks = comm->nRanks;
-    int myrank = comm->rank;
-    int nchannels = info->nChannels;
-    LOG_MOD(NCCL_MOD,
-            "modTopologyInit for rank: %d, ringmapsize=%lu, inited:%d", myrank,
-            topology->ringmap.size(), topology->init);
-    if ((topology->init & topoInitState::META_INITED) == 0) {
+// NCCL_API(ncclResult_t, ncclModSync);
 
-      topology->nranks = nranks;
-      topology->nnodes = MOD_N_NODES; // should be set by application!
-      topology->nrankpernode = topology->nranks / topology->nnodes;
-      assert(topology->nranks % topology->nnodes == 0);
-      topology->init =
-          (topoInitState)(topology->init | topoInitState::META_INITED);
-    }
-    if ((topology->init & topoInitState::PER_CALL_INITED) == 0) {
-      topology->nchannels = nchannels;
-      topology->myranks.clear();
-      topology->init =
-          (topoInitState)(topology->init | topoInitState::PER_CALL_INITED);
-      LOG_MOD(NCCL_MOD, "Myranks cleared!");
-    }
-    topology->myranks.insert(myrank);
-  }
-  return ncclSuccess;
-}
-
-ncclResult_t modTopologyUpdateMap(modTopology *topology, int rank, int channel,
-                                  ncclRing *ring, int *ringranks, int nranks) {
-  topology->prev[rank] = ring->prev;
-  topology->next[rank] = ring->next;
-  topology->ringmap[make_pair(rank, channel)] = ring->index;
-
-  if (rank == 0) {
-    for (int i = 1; i < nranks; ++i) {
-      topology->ringmap[make_pair(i, channel)] = ringranks[i];
-      LOG_MOD(NCCL_MOD, "update ringmap rk%d ringidx%d ch%d", i,
-              topology->ringmap[make_pair(i, channel)], channel);
-    }
-  }
-  LOG_MOD(NCCL_MOD, "modTopologyUpdateMap [%d->%d->%d], mapsize=%lu",
-          topology->prev[rank], rank, topology->next[rank],
-          topology->ringmap.size());
-  return ncclSuccess;
-}
-
-ncclResult_t modTopologyDestroy(modTopology *topology) {
-  assert(topology->init & topoInitState::PER_CALL_INITED);
-  topology->init =
-      (topoInitState)(topology->init ^ topoInitState::PER_CALL_INITED);
-  LOG_MOD(NCCL_MOD, "modTopologyDestroy");
-  return ncclSuccess;
-}
-
-NCCL_API(ncclResult_t, ncclModSync);
-
-ncclResult_t ncclModSync() {
-  LOG_MOD(NCCL_MOD, "ncclModSync Called");
-  if (MOD_KERNEL_BYPASS) {
-    while (global_coordinator.done == 0) {
-      sched_yield();
-    }
-    LOG_MOD(NCCL_MOD, "ncclModSync Done");
-    modCoordinatorDestroy(&global_coordinator);
-    modTopologyDestroy(&global_topology);
-  }
-  return ncclSuccess;
-}
+// ncclResult_t ncclModSync() {
+//   LOG_MOD(NCCL_MOD, "ncclModSync Called");
+//   if (MOD_KERNEL_BYPASS) {
+//     while (global_coordinator.done == 0) {
+//       sched_yield();
+//     }
+//     LOG_MOD(NCCL_MOD, "ncclModSync Done");
+//     modCoordinatorDestroy(&global_coordinator);
+//     modTopologyDestroy(&global_topology);
+//   }
+//   return ncclSuccess;
+// }
