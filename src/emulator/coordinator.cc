@@ -1,6 +1,6 @@
-#include "emulator/coordinator.h"
 #include "align.h"
 #include "comm.h"
+#include "emulator.h"
 #include <assert.h>
 #include <cinttypes>
 #include <map>
@@ -8,42 +8,6 @@
 #include <stdlib.h>
 #include <string>
 using namespace std;
-
-int MOD_KERNEL_BYPASS = -1;
-int MOD_N_NODES = -1;
-int MOD_MY_NODE = -1;
-modCoordinator global_coordinator;
-
-modTopology global_topology;
-
-ncclResult_t modGetAllEnvVars() {
-  LOG_MOD(NCCL_MOD, "modGetAllEnvVars");
-  char *env = getenv("MOD_N_MPI_RANKS");
-  if (env == NULL) {
-    LOG_MOD(NCCL_LOG_ABORT, "Error: N_MPI_RANKS not set");
-    return ncclModError;
-  } else {
-    MOD_N_NODES = atoi(env);
-    LOG_MOD(NCCL_MOD, "MOD_N_MPI_RANKS=%d", MOD_N_NODES);
-  }
-  env = getenv("MOD_MY_MPI_RANK");
-  if (env == NULL) {
-    LOG_MOD(NCCL_LOG_ABORT, "Error: MY_MPI_RANK not set");
-    return ncclModError;
-  } else {
-    MOD_MY_NODE = atoi(env);
-    LOG_MOD(NCCL_MOD, "MY_MPI_RANK=%d", MOD_MY_NODE);
-  }
-  env = getenv("MOD_KERNEL_BYPASS");
-  if (env == NULL) {
-    LOG_MOD(NCCL_MOD, "MOD_KERNEL_BYPASS not set, default to 0");
-    MOD_KERNEL_BYPASS = 0;
-  } else {
-    MOD_KERNEL_BYPASS = atoi(env);
-    LOG_MOD(NCCL_MOD, "MOD_KERNEL_BYPASS=%d", MOD_KERNEL_BYPASS);
-  }
-  return ncclSuccess;
-}
 
 static void calc_size_inkernel(int nelem, vector<int> &res) {
   LOG_MOD(NCCL_MOD, "calc_size_inkernel: nelem=%d", nelem);
@@ -394,65 +358,6 @@ ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid,
   }
   LOG_MOD(NCCL_MOD, "modCoordinatorRecv: size=%d, recvtail=%d", size,
           ch.recvTail);
-  return ncclSuccess;
-}
-
-ncclResult_t modTopologyInit(modTopology *topology, ncclProxyOp *proxyOp,
-                             ncclInfo *info) {
-  LOG_MOD(NCCL_MOD, "modTopologyInit kbypass=%d", MOD_KERNEL_BYPASS);
-  if (MOD_KERNEL_BYPASS == 1) {
-    ncclComm *comm = info->comm;
-    int nranks = comm->nRanks;
-    int myrank = comm->rank;
-    int nchannels = info->nChannels;
-    LOG_MOD(NCCL_MOD,
-            "modTopologyInit for rank: %d, ringmapsize=%lu, inited:%d", myrank,
-            topology->ringmap.size(), topology->init);
-    if ((topology->init & topoInitState::META_INITED) == 0) {
-
-      topology->nranks = nranks;
-      topology->nnodes = MOD_N_NODES; // should be set by application!
-      topology->nrankpernode = topology->nranks / topology->nnodes;
-      assert(topology->nranks % topology->nnodes == 0);
-      topology->init =
-          (topoInitState)(topology->init | topoInitState::META_INITED);
-    }
-    if ((topology->init & topoInitState::PER_CALL_INITED) == 0) {
-      topology->nchannels = nchannels;
-      topology->myranks.clear();
-      topology->init =
-          (topoInitState)(topology->init | topoInitState::PER_CALL_INITED);
-      LOG_MOD(NCCL_MOD, "Myranks cleared!");
-    }
-    topology->myranks.insert(myrank);
-  }
-  return ncclSuccess;
-}
-
-ncclResult_t modTopologyUpdateMap(modTopology *topology, int rank, int channel,
-                                  ncclRing *ring, int *ringranks, int nranks) {
-  topology->prev[rank] = ring->prev;
-  topology->next[rank] = ring->next;
-  topology->ringmap[make_pair(rank, channel)] = ring->index;
-
-  if (rank == 0) {
-    for (int i = 1; i < nranks; ++i) {
-      topology->ringmap[make_pair(i, channel)] = ringranks[i];
-      LOG_MOD(NCCL_MOD, "update ringmap rk%d ringidx%d ch%d", i,
-              topology->ringmap[make_pair(i, channel)], channel);
-    }
-  }
-  LOG_MOD(NCCL_MOD, "modTopologyUpdateMap [%d->%d->%d], mapsize=%lu",
-          topology->prev[rank], rank, topology->next[rank],
-          topology->ringmap.size());
-  return ncclSuccess;
-}
-
-ncclResult_t modTopologyDestroy(modTopology *topology) {
-  assert(topology->init & topoInitState::PER_CALL_INITED);
-  topology->init =
-      (topoInitState)(topology->init ^ topoInitState::PER_CALL_INITED);
-  LOG_MOD(NCCL_MOD, "modTopologyDestroy");
   return ncclSuccess;
 }
 

@@ -1,5 +1,5 @@
-#ifndef MOD_COORDINATOR_H_
-#define MOD_COORDINATOR_H_
+#ifndef EMULATOR_H
+#define EMULATOR_H
 
 #include "nccl.h"
 #include "proxy.h"
@@ -7,10 +7,23 @@
 #include <set>
 #include <vector>
 
+// forward declarations
+struct modCoordinator;
+struct modTopology;
+
+// begin global
 // env vars
 extern int MOD_KERNEL_BYPASS;
 extern int MOD_N_NODES;
 extern int MOD_MY_NODE;
+extern modCoordinator global_coordinator;
+extern modTopology global_topology;
+
+ncclResult_t modGetAllEnvVars();
+// end global
+
+// begin coordinator
+
 // channel represents a connection between two ranks
 struct modChannelInfo {
   int bid;
@@ -68,6 +81,22 @@ struct modCoordinator {
   ncclInfo *info;
 };
 
+ncclResult_t modCoordinatorInit(modCoordinator *coordinator,
+                                ncclProxyOp *proxyOp, ncclInfo *info);
+
+ncclResult_t modCoordinatorDestroy(modCoordinator *coordinator);
+
+ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int cid,
+                                       int &size);
+
+ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int cid, int size);
+
+ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid, int size);
+
+// end coordinator
+
+// begin topology
+
 typedef enum {
   UNINITED = 0,
   META_INITED = 1,
@@ -89,22 +118,6 @@ struct modTopology {
   std::map<std::pair<int, int>, int> ringmap;
 };
 
-extern modCoordinator global_coordinator;
-extern modTopology global_topology;
-
-ncclResult_t modGetAllEnvVars();
-
-ncclResult_t modCoordinatorInit(modCoordinator *coordinator, ncclProxyOp* proxyOp, ncclInfo* info);
-
-ncclResult_t modCoordinatorDestroy(modCoordinator *coordinator);
-
-ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int cid,
-                                       int &size);
-
-ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int cid, int size);
-
-ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid, int size);
-
 ncclResult_t modTopologyInit(modTopology *topology, ncclProxyOp *proxyOp,
                              ncclInfo *info);
 
@@ -113,4 +126,6 @@ ncclResult_t modTopologyUpdateMap(modTopology *topology, int rank, int channel,
 
 ncclResult_t modTopologyDestroy(modTopology *topology);
 
-#endif
+// end topology
+
+#endif // EMULATOR_H

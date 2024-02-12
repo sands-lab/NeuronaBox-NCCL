@@ -10,7 +10,7 @@
 #include "channel.h"
 #include "coll_net.h"
 #include "cudawrap.h"
-#include "emulator/coordinator.h"
+#include "emulator.h"
 #include "gdrwrap.h"
 #include "include/debug.h"
 #include "include/nccl_common.h"

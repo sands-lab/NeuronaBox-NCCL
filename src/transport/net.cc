@@ -7,7 +7,7 @@
 #include "net.h"
 #include "collectives.h"
 #include "comm.h"
-#include "emulator/coordinator.h"
+#include "emulator.h"
 #include "gdrwrap.h"
 #include "graph.h"
 #include "p2p.h"
