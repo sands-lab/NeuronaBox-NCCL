@@ -10,6 +10,7 @@
 // forward declarations
 struct modCoordinator;
 struct modTopology;
+struct modController;
 
 // begin global
 // env vars
@@ -18,6 +19,7 @@ extern int MOD_N_NODES;
 extern int MOD_MY_NODE;
 extern modCoordinator global_coordinator;
 extern modTopology global_topology;
+extern modController global_controller;
 
 ncclResult_t modGetAllEnvVars();
 // end global
@@ -127,5 +129,23 @@ ncclResult_t modTopologyUpdateMap(modTopology *topology, int rank, int channel,
 ncclResult_t modTopologyDestroy(modTopology *topology);
 
 // end topology
+
+// begin controller
+
+struct modController {
+  std::map<uint64_t, modTaskInfo> taskMap;
+}
+
+ncclResult_t
+modControllerAddTask(modController *controller, ncclInfo *info);
+
+ncclResult_t modControllerQueryTask(modController *controller,
+                                    uint64_t unique_id, modTaskInfo *task);
+
+ncclResult_t modControllerRemoveTask(modController *controller,
+                                     uint64_t unique_id);
+
+ncclResult_t modControllerCheck(modController *controller, uint64_t unique_id,
+                                int &admit);
 
 #endif // EMULATOR_H

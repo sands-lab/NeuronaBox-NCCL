@@ -1649,6 +1649,7 @@ ncclResult_t ncclEnqueueCheck(struct ncclInfo* info) {
   ncclResult_t ret = ncclSuccess;
   int devOld = -1;
   printf("NCCL Enqueued: %s\n", info->opName);
+  NCCLCHECK(modControllerAddTask(&global_controller, info));
   NCCLCHECKGOTO(PtrCheck(info->comm, info->opName, "comm"), ret, fail);
   // Check whether communicator is ready to communicate
   NCCLCHECKGOTO(ncclCommEnsureReady(info->comm), ret, fail);
