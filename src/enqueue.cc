@@ -584,12 +584,18 @@ static ncclResult_t scheduleCollTasksToPlan(
 
       plan->threadPerBlock = std::max(plan->threadPerBlock, info.nThreads);
       if (!plan->kernelSpecialized) {
-        LOG_MOD(NCCL_MOD, "fill kernal with workfuncindex = %d", workFuncIndex);
+        //! mod
+        plan->unique_id = head->unique_id;
+        LOG_MOD(NCCL_MOD,
+                "fill kernal with workfuncindex = %d, unique_id = %lu",
+                workFuncIndex, plan->unique_id);
+
         plan->kernelFn = ncclDevKernelForFunc[workFuncIndex];
         plan->kernelSpecialized = ncclDevKernelForFuncIsSpecialized[workFuncIndex];
       }
     }
   }
+  LOG_MOD(NCCL_MOD, "scheduleCollTasksToPlan done");
   return ncclSuccess;
 }
 
@@ -1620,6 +1626,11 @@ static ncclResult_t taskAppend(struct ncclComm* comm, struct ncclInfo const* inf
       t->op = opFull; // C++ struct assignment
       t->chunkSteps = info->chunkSteps;
       t->sliceSteps = info->sliceSteps;
+
+      //! emu
+      LOG_MOD(NCCL_MOD, "New task unique_id %lu", info->unique_id);
+      t->unique_id = info->unique_id;
+
       ncclIntruQueueEnqueue(&tasks->collQueue, t);
       tasks->collBytesTotal += info->nBytes;
       tasks->nTasksColl += 1;

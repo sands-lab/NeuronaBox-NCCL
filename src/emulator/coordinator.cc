@@ -227,7 +227,7 @@ static void metaInit(modCoordinator *coordinator, ncclProxyOp *proxyOp,
     modTaskInfo task;
     task.count = info->count;
     task.tsize = sizeof(float);
-    task.primitive = 0;
+    task.coll = 0;
     task.reduceOp = 0;
     task.algo = 0;
     task.nchannels = info->nChannels;

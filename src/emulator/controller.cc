@@ -14,20 +14,22 @@ modController global_controller;
 
 static uint64_t gen_unique_id() {
   static uint64_t unique_id = 0;
-  return unique_id++;
+  return ++unique_id;
 }
 
 ncclResult_t modControllerAddTask(modController *controller, ncclInfo *info) {
   modTaskInfo task;
   info->unique_id = gen_unique_id();
   Info2Task(info, &task);
-  assert(controller->taskMap.count(task.unique_id) > 0);
+  assert(controller->taskMap.count(task.unique_id) == 0);
   controller->taskMap[task.unique_id] = task;
+  LOG_MOD(NCCL_MOD, "modControllerAddTask for unique_id: %lu", task.unique_id);
   return ncclSuccess;
 }
 
 ncclResult_t modControllerQueryTask(modController *controller,
                                     uint64_t unique_id, modTaskInfo *task) {
+  LOG_MOD(NCCL_MOD, "modControllerQueryTask for unique_id: %lu", unique_id);
   auto it = controller->taskMap.find(unique_id);
   if (it != controller->taskMap.end()) {
     *task = it->second;
@@ -40,6 +42,7 @@ ncclResult_t modControllerQueryTask(modController *controller,
 
 ncclResult_t modControllerRemoveTask(modController *controller,
                                      uint64_t unique_id) {
+  LOG_MOD(NCCL_MOD, "modControllerRemoveTask for unique_id: %lu", unique_id);
   if (controller->taskMap.count(unique_id) > 0) {
     controller->taskMap.erase(unique_id);
     return ncclSuccess;
@@ -52,8 +55,9 @@ ncclResult_t modControllerRemoveTask(modController *controller,
 
 ncclResult_t modControllerCheck(modController *controller, uint64_t unique_id,
                                 int &bypass) {
+  LOG_MOD(NCCL_MOD, "modControllerCheck for unique_id: %lu", unique_id);
   assert(controller->taskMap.count(unique_id) > 0);
   auto task = controller->taskMap[unique_id];
-  bypass = task.primitive == ncclFuncAllReduce;
+  bypass = task.coll == ncclFuncAllReduce;
   return ncclSuccess;
 }

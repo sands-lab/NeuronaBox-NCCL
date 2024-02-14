@@ -58,13 +58,13 @@ struct modCommInfo {
 struct modTaskInfo {
   int count;     // number of elements
   int tsize;     // size of each element
-  int primitive; // placeholder, always allreduce
+  int coll;      // placeholder, always allreduce
   int reduceOp;  // placeholder, always sum
   int algo;      // placeholder, always ring
   int proto;     // placeholder, always Simple
   int nchannels;
   int nthreads;
-  int unique_id;
+  uint64_t unique_id;
 };
 
 struct modCoordinator {

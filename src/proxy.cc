@@ -461,6 +461,7 @@ ncclResult_t ncclProxyPost(struct ncclProxyOpsPool* pool, int nextOps, int nextO
 }
 
 static ncclResult_t ncclLocalOpAppend(struct ncclComm* comm, struct ncclProxyConnector* proxyConn, struct ncclProxyOp* proxyOp) {
+  LOG_MOD(NCCL_MOD, "nccl local op append");
   int tpLocalRank = comm->topParentLocalRanks[comm->localRank];
   struct ncclProxyOps* proxyOps = comm->proxyState->proxyOps;
   if (proxyOps == NULL) return ncclInternalError;
@@ -519,12 +520,13 @@ static ncclResult_t ncclLocalOpAppend(struct ncclComm* comm, struct ncclProxyCon
     proxyOps->count -= toSend;
   }
   TIME_STOP(0);
+  LOG_MOD(NCCL_MOD, "nccl local op append done");
   return ncclSuccess;
 }
 
 static ncclResult_t SaveProxy(struct ncclComm* comm, struct ncclChannel* channel, int type, int peer, struct ncclProxyOp* op, int connIndex, bool* justInquire) {
   if (peer < 0) return ncclSuccess;
-
+  LOG_MOD(NCCL_MOD, "save proxy for op unique_id %lu", op->unique_id);
   struct ncclChannelPeer* peerComm = channel->peers[peer];
   struct ncclConnector* connector = type == proxyRecv ? peerComm->recv+connIndex : peerComm->send+connIndex;
   if (connector->transportComm == NULL) {
