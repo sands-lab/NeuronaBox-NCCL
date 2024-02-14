@@ -544,6 +544,10 @@ static ncclResult_t scheduleCollTasksToPlan(
       info.op = (ncclRedOp_t)(int)head->op.op;
       info.chunkSteps = head->chunkSteps;
       info.sliceSteps = head->sliceSteps;
+
+      //! emu
+      info.unique_id = head->unique_id;
+
       NCCLCHECK(ncclInfoSetDerived(&info, comm->nRanks));
       if (nAggOps > 1) {
         int maxChannels = aggInfo.algorithm == NCCL_ALGO_NVLS || aggInfo.algorithm == NCCL_ALGO_NVLS_TREE ? comm->nvlsChannels : comm->nChannels;
@@ -585,7 +589,7 @@ static ncclResult_t scheduleCollTasksToPlan(
       plan->threadPerBlock = std::max(plan->threadPerBlock, info.nThreads);
       if (!plan->kernelSpecialized) {
         //! mod
-        plan->unique_id = head->unique_id;
+        plan->unique_id = info.unique_id;
         LOG_MOD(NCCL_MOD,
                 "fill kernal with workfuncindex = %d, unique_id = %lu",
                 workFuncIndex, plan->unique_id);

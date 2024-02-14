@@ -55,9 +55,11 @@ ncclResult_t modControllerRemoveTask(modController *controller,
 
 ncclResult_t modControllerCheck(modController *controller, uint64_t unique_id,
                                 int &bypass) {
-  LOG_MOD(NCCL_MOD, "modControllerCheck for unique_id: %lu", unique_id);
   assert(controller->taskMap.count(unique_id) > 0);
   auto task = controller->taskMap[unique_id];
-  bypass = task.coll == ncclFuncAllReduce;
+  bypass = MOD_KERNEL_BYPASS && task.coll == ncclFuncAllReduce;
+  LOG_MOD(NCCL_MOD, "modControllerCheck for unique_id: %lu, bypass = %d",
+          unique_id, bypass);
+
   return ncclSuccess;
 }
