@@ -1124,6 +1124,11 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
   }
   args->idle = 1;
   if (args->state == ncclProxyOpProgress) {
+    int unique_id = args->unique_id;
+    int bypass = 0;
+    modControllerCheck(&global_controller, unique_id, bypass);
+    LOG_MOD(NCCL_MOD, "send proxy progress unique_id = %d, bypass = %d",
+            unique_id, bypass);
     int p = args->protocol;
     int maxDepth = std::min(NCCL_STEPS, NCCL_SHARED_STEPS/args->nsubs);
     for (int s=0; s<args->nsubs; s++) {
@@ -1178,9 +1183,6 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
         bool cond = sizesFifo[buffSlot] != -1 && ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL);
         int size = 0;
 
-        int unique_id = args->unique_id;
-        int bypass = 0;
-        modControllerCheck(&global_controller, unique_id, bypass);
         if (bypass) {
           modCoordinatorGetSendSize(&global_coordinator, sub->channelId, size);
         }
@@ -1322,7 +1324,8 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
     int unique_id = args->unique_id;
     int bypass = 0;
     modControllerCheck(&global_controller, unique_id, bypass);
-
+    LOG_MOD(NCCL_MOD, "recv proxy progress unique_id = %d, bypass = %d",
+            unique_id, bypass);
     int p = args->protocol;
     int maxDepth = std::min(NCCL_STEPS, NCCL_SHARED_STEPS/args->nsubs);
     for (int s=0; s<args->nsubs; s+=args->subs[s].groupSize) {

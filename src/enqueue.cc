@@ -1053,8 +1053,8 @@ ncclResult_t ncclLaunchKernelBefore_NoUncapturedCuda(struct ncclComm* comm, stru
 NCCL_PARAM(MemSyncDomain, "MEM_SYNC_DOMAIN", cudaLaunchMemSyncDomainRemote);
 #endif
 
-ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan) {
-  LOG_MOD(NCCL_MOD, "nccl lanunch kernel");
+ncclResult_t ncclLaunchKernel(struct ncclComm *comm,
+                              struct ncclKernelPlan *plan) {
   struct ncclTasks* tasks = &comm->tasks;
   void *fn = plan->kernelFn;
   cudaStream_t launchStream = tasks->streams->stream;
@@ -1067,6 +1067,8 @@ ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan
   int unique_id = plan->unique_id;
   int bypass = 0;
   NCCLCHECK(modControllerCheck(&global_controller, unique_id, bypass));
+  LOG_MOD(NCCL_MOD, "nccl lanunch kernel, unique_id = %d, bypass = %d",
+          unique_id, bypass);
 
 #if CUDART_VERSION >= 11080
   int driverVersion;
@@ -1464,10 +1466,12 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
 
   LOG_MOD(NCCL_MOD, "info->pattern %d, info->nstepsPerLoop %d, info->nchunksPerLoop %d, nloops=%d", info->pattern, info->nstepsPerLoop, info->nchunksPerLoop, nLoops);
   LOG_MOD(NCCL_MOD,
-          "proxyOp->nsteps=%d, proxyOp->sliceSteps=%d, proxyOp->chunkSteps=%d, proxyOp->chunkSize=%d,proxyOp->protocol=%d,proxyOp->nbytes=%lu",
-                              proxyOp->nsteps,
-          proxyOp->sliceSteps, proxyOp->chunkSteps, proxyOp->chunkSize,
-          proxyOp->protocol, proxyOp->nbytes);
+          "proxyOp->nsteps=%d, proxyOp->sliceSteps=%d, proxyOp->chunkSteps=%d, "
+          "proxyOp->chunkSize=%d,proxyOp->protocol=%d,proxyOp->nbytes=%lu, "
+          "proxyOp->unique_id=%lu",
+          proxyOp->nsteps, proxyOp->sliceSteps, proxyOp->chunkSteps,
+          proxyOp->chunkSize, proxyOp->protocol, proxyOp->nbytes,
+          proxyOp->unique_id);
   TRACE(NCCL_COLL,"opCount %lx slicesteps %d spl %d cpl %d nbytes %zi -> protocol %d nchannels %d nthreads %d, nloops %d nsteps %d chunksize %d comm %p",
       proxyOp->opCount, sliceSteps, info->nstepsPerLoop, info->nchunksPerLoop, info->nBytes, info->protocol, info->nChannels, info->nThreads,
       nLoops, proxyOp->nsteps, chunkSize, info->comm);

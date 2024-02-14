@@ -159,6 +159,11 @@ static ncclResult_t doLaunches(struct ncclComm* head) {
         if (moreRounds) {
           // Pop next unlaunched kernel
           struct ncclKernelPlan* plan = comm->unlaunchedPlansHead;
+
+          int bypass = 0;
+          NCCLCHECK(
+              modControllerCheck(&global_controller, plan->unique_id, bypass));
+
           if (plan != nullptr) {
             comm->unlaunchedPlansHead = plan->next;
             CUDACHECKGOTO(cudaSetDevice(comm->cudaDev), result, failure);
@@ -169,6 +174,11 @@ static ncclResult_t doLaunches(struct ncclComm* head) {
           if (useBarrier) ncclCommIntraBarrierIn(comm, comm->unlaunchedPlansHead != nullptr ? 1 : 0);
           if (plan != nullptr) {
             NCCLCHECKGOTO(ncclLaunchKernelAfter_NoCuda(comm, plan), result, failure);
+          }
+
+          if (bypass) {
+            NCCLCHECK(ncclModSync());
+            LOG_MOD(NCCL_MOD, "nccl kernel launch success and synced");
           }
         } else { // Final round.
           CUDACHECKGOTO(cudaSetDevice(comm->cudaDev), result, failure);
@@ -181,10 +191,7 @@ static ncclResult_t doLaunches(struct ncclComm* head) {
     cliqueHead = cliqueNextHead;
   } while (cliqueHead != nullptr);
   LOG_MOD(NCCL_MOD, "do launches finished!");
-  if (MOD_KERNEL_BYPASS) {
-    NCCLCHECK(ncclModSync());
-    LOG_MOD(NCCL_MOD, "nccl kernel launch success and synced");
-  }
+
 failure:
   return result;
 }
