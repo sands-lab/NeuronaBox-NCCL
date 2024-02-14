@@ -51,9 +51,9 @@ ncclResult_t modControllerRemoveTask(modController *controller,
 }
 
 ncclResult_t modControllerCheck(modController *controller, uint64_t unique_id,
-                                int &admit) {
-  assert(controller->taskMap[unique_id].count() > 0);
+                                int &bypass) {
+  assert(controller->taskMap.count(unique_id) > 0);
   auto task = controller->taskMap[unique_id];
-  admit = task->primitive == ncclFuncAllReduce;
+  bypass = task.primitive == ncclFuncAllReduce;
   return ncclSuccess;
 }

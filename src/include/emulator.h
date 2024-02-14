@@ -64,6 +64,7 @@ struct modTaskInfo {
   int proto;     // placeholder, always Simple
   int nchannels;
   int nthreads;
+  int unique_id;
 };
 
 struct modCoordinator {
@@ -134,7 +135,7 @@ ncclResult_t modTopologyDestroy(modTopology *topology);
 
 struct modController {
   std::map<uint64_t, modTaskInfo> taskMap;
-}
+};
 
 ncclResult_t
 modControllerAddTask(modController *controller, ncclInfo *info);
@@ -146,6 +147,6 @@ ncclResult_t modControllerRemoveTask(modController *controller,
                                      uint64_t unique_id);
 
 ncclResult_t modControllerCheck(modController *controller, uint64_t unique_id,
-                                int &admit);
+                                int &bypass);
 
 #endif // EMULATOR_H

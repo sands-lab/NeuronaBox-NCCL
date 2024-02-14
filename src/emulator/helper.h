@@ -1,3 +1,3 @@
 #include "emulator.h"
 
-void Info2Task(ncclinfo *info, modTaskInfo *task);
+void Info2Task(ncclInfo *info, modTaskInfo *task);

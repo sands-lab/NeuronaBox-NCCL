@@ -12,6 +12,7 @@
 #include "cudawrap.h"
 #include "emulator.h"
 #include "gdrwrap.h"
+#include "include/checks.h"
 #include "include/debug.h"
 #include "include/nccl_common.h"
 #include "transport.h"
@@ -1052,7 +1053,12 @@ ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan
   size_t smem = ncclShmemDynamicSize(comm->cudaArch);
   void *args[3] = {&comm->devComm, &plan->channelMask, &plan->workHead};
 
-  #if CUDART_VERSION >= 11080
+  //! emu
+  int unique_id = plan->unique_id;
+  int bypass = 0;
+  NCCLCHECK(modControllerCheck(&global_controller, unique_id, bypass));
+
+#if CUDART_VERSION >= 11080
   int driverVersion;
   NCCLCHECK(ncclCudaDriverVersion(&driverVersion));
   if (driverVersion >= 11080) {
@@ -1094,7 +1100,7 @@ ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan
     launchConfig.numAttrs = attrs;
     launchConfig.stream = launchStream;
 //! comment cudaLaunchKernelExc
-    if (MOD_KERNEL_BYPASS) {
+    if (bypass) {
       LOG_MOD(NCCL_MOD, "bypass kernel launch exc define");
     } else {
       CUDACHECK(cudaLaunchKernelExC(&launchConfig, fn, args));
@@ -1104,7 +1110,7 @@ ncclResult_t ncclLaunchKernel(struct ncclComm* comm, struct ncclKernelPlan* plan
   #endif
   // Standard kernel launch
   //! comment cudaLaunchKernel
-  if (MOD_KERNEL_BYPASS) {
+  if (bypass) {
     LOG_MOD(NCCL_MOD, "bypass kernel launch");
   } else {
     CUDACHECK(cudaLaunchKernel(fn, grid, block, args, smem, launchStream));
@@ -1443,6 +1449,9 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
   // because some protocols need to transmit more than the total size, plus they sometimes
   // round up
   proxyOp->nbytes = stepSize*proxyOp->sliceSteps;
+  //! mut
+  proxyOp->unique_id = info->unique_id;
+
   LOG_MOD(NCCL_MOD, "info->pattern %d, info->nstepsPerLoop %d, info->nchunksPerLoop %d, nloops=%d", info->pattern, info->nstepsPerLoop, info->nchunksPerLoop, nLoops);
   LOG_MOD(NCCL_MOD,
           "proxyOp->nsteps=%d, proxyOp->sliceSteps=%d, proxyOp->chunkSteps=%d, proxyOp->chunkSize=%d,proxyOp->protocol=%d,proxyOp->nbytes=%lu",
@@ -1457,7 +1466,7 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
   } else if (info->protocol == NCCL_PROTO_SIMPLE) {
     LOG_MOD(NCCL_MOD, "Using Protocol SIMPLE");
   } else {
-    LOG_MOD(NCCL_MOD, "Using Protocol Unkonwn!");
+    LOG_MOD(NCCL_MOD, "Using Protocol Unknown!");
   }
   //! for now, initialize cooridnator here
   //! must init topology first!
@@ -1649,7 +1658,10 @@ ncclResult_t ncclEnqueueCheck(struct ncclInfo* info) {
   ncclResult_t ret = ncclSuccess;
   int devOld = -1;
   printf("NCCL Enqueued: %s\n", info->opName);
+  //! emu
   NCCLCHECK(modControllerAddTask(&global_controller, info));
+  LOG_MOD(NCCL_MOD, "New info unique_id %lu", info->unique_id);
+
   NCCLCHECKGOTO(PtrCheck(info->comm, info->opName, "comm"), ret, fail);
   // Check whether communicator is ready to communicate
   NCCLCHECKGOTO(ncclCommEnsureReady(info->comm), ret, fail);

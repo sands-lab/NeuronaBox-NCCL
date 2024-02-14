@@ -381,9 +381,13 @@ static ncclResult_t ncclProxyOpToArgs(struct ncclProxyOp* op, struct ncclProxyAr
     }
     return ncclSuccess;
   }
-  LOG_MOD(NCCL_MOD, "Append First Sub on Proxt OP");
-  LOG_MOD(NCCL_MOD, "op->opCount: %ld, op->sliceSteps: %d, op->chunkSteps: %d, op->chunkSize: %d, op->dtype: %d, op->redOp: %d, op->pattern: %d, op->protocol: %d", op->opCount, op->sliceSteps, op->chunkSteps, op->chunkSize, op->dtype, op->redOp, op->pattern, op->protocol);
-  //memset(&args->progress, 0, sizeof(struct ncclProxyArgs)-offsetof(struct ncclProxyArgs, progress));
+  // LOG_MOD(NCCL_MOD, "Append First Sub on Proxt OP");
+  // LOG_MOD(NCCL_MOD, "op->opCount: %ld, op->sliceSteps: %d, op->chunkSteps:
+  // %d, op->chunkSize: %d, op->dtype: %d, op->redOp: %d, op->pattern: %d,
+  // op->protocol: %d", op->opCount, op->sliceSteps, op->chunkSteps,
+  // op->chunkSize, op->dtype, op->redOp, op->pattern, op->protocol);
+  // memset(&args->progress, 0, sizeof(struct ncclProxyArgs)-offsetof(struct
+  // ncclProxyArgs, progress));
   args->done = 0;
   args->opCount = op->opCount;
   args->sliceSteps = op->sliceSteps;
@@ -396,6 +400,10 @@ static ncclResult_t ncclProxyOpToArgs(struct ncclProxyOp* op, struct ncclProxyAr
   args->state = ncclProxyOpReady;
   args->progress = op->connection->tcomm->proxyProgress;
   args->proxyAppendPtr = op->connection->proxyAppendPtr;
+
+  //! emu
+  args->unique_id = op->unique_id;
+  LOG_MOD(NCCL_MOD, "Op2Args op->unique_id: %ld", op->unique_id);
   return ncclSuccess;
 }
 
