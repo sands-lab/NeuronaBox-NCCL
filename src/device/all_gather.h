@@ -60,7 +60,7 @@ namespace {
         prims.directCopySend(chunkOffset, offset, nelem);
       }
       if (tid == 0) {
-        printf("AllGather: step 0, rankDest: %d, offset: %d, nelem: %d\n",
+        printf("AllGather: step 0, rankDest: %d, offset: %lu, nelem: %d\n",
                rankDest, offset, nelem);
       }
       // k-2 steps: copy to next GPU
@@ -70,8 +70,8 @@ namespace {
 
         prims.directRecvCopySend(offset, nelem);
         if (tid == 0) {
-          printf("AllGather: step %d, rankDest: %d, offset: %d, nelem: %d\n", j,
-                 rankDest, offset, nelem);
+          printf("AllGather: step %d, rankDest: %d, offset: %lu, nelem: %d\n",
+                 j, rankDest, offset, nelem);
         }
       }
 
@@ -81,7 +81,7 @@ namespace {
       // Final wait/copy.
       prims.directRecv(offset, nelem);
       if (tid == 0) {
-        printf("AllGather: step %d, rankDest: %d, offset: %d, nelem: %d\n",
+        printf("AllGather: step %d, rankDest: %d, offset: %lu, nelem: %d\n",
                nranks - 1, rankDest, offset, nelem);
       }
     }
