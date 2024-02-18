@@ -1,10 +1,13 @@
 #ifndef EMULATOR_H
 #define EMULATOR_H
 
+#include "driver_types.h"
 #include "nccl.h"
 #include "proxy.h"
+#include <cstdint>
 #include <map>
 #include <set>
+#include <sys/types.h>
 #include <vector>
 
 // forward declarations
@@ -31,10 +34,10 @@ struct modChannelInfo {
   int bid;
   int send;
   int recv;
-  std::vector<int> sendSizes;
-  std::vector<int> recvSizes;
-  int sendTail;
-  int recvTail;
+  std::vector<int> sendsizes;
+  std::vector<int> recvsizes;
+  int sendtail;
+  int recvtail;
 };
 
 // rank represents a gpu device
@@ -58,13 +61,22 @@ struct modCommInfo {
 struct modTaskInfo {
   int count;     // number of elements
   int tsize;     // size of each element
-  int coll;      // placeholder, always allreduce
-  int reduceOp;  // placeholder, always sum
-  int algo;      // placeholder, always ring
-  int proto;     // placeholder, always Simple
+  int coll;      // i.e. allreduce
+  int reduceOp;  // i.e. sum
+  int algo;      // i.e. ring
+  int proto;     // i.e. Simple
   int nchannels;
   int nthreads;
   uint64_t unique_id;
+};
+
+struct modEmulatorTask {
+  int done;
+  int init;
+  int sendrank;
+  int recvrank;
+  modTaskInfo info;
+  std::map<int, modRankInfo> ranks;
 };
 
 struct modCoordinator {
@@ -79,6 +91,7 @@ struct modCoordinator {
   // <channelId, ringIndex>
   std::map<int, int> sendRingMap;
   std::map<int, int> recvRingMap;
+  std::map<uint64_t, modEmulatorTask> id2task;
 
   ncclProxyOp *proxyOp;
   ncclInfo *info;
@@ -134,7 +147,11 @@ ncclResult_t modTopologyDestroy(modTopology *topology);
 // begin controller
 
 struct modController {
-  std::map<uint64_t, modTaskInfo> taskMap;
+  std::map<uint64_t, modEmulatorTask> id2task;
+  std::map<cudaStream_t, std::vector<uint64_t>> stream2ids;
+  modCoordinator *coordinator;
+  modTopology *topology;
+  modCommInfo *comm;
 };
 
 ncclResult_t

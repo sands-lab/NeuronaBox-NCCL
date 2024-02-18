@@ -1,5 +1,6 @@
 #include "align.h"
 #include "comm.h"
+#include "driver_types.h"
 #include "emulator.h"
 #include <assert.h>
 #include <cinttypes>
@@ -136,8 +137,8 @@ static void calc_recvsize_channel(int nranks, int myrank, int count,
 }
 
 static int check_done_ch(modChannelInfo &ch) {
-  if (ch.sendTail == ch.sendSizes.size() &&
-      ch.recvTail == ch.recvSizes.size()) {
+  if (ch.sendtail == ch.sendsizes.size() &&
+      ch.recvtail == ch.recvsizes.size()) {
     return 1;
   }
   return 0;
@@ -193,20 +194,20 @@ static void rankInit(modCoordinator *coordinator, int rank) {
   for (int i = 0; i < nchannels; ++i) {
     modChannelInfo ch;
     ch.bid = i;
-    ch.sendSizes = vector<int>();
-    ch.recvSizes = vector<int>();
+    ch.sendsizes = vector<int>();
+    ch.recvsizes = vector<int>();
     ch.send = rankinfo.send;
     ch.recv = rankinfo.recv;
     if (rankinfo.send) {
       calc_sendsize_channel(nranks, rankinfo.myrank, count, nchannels, i,
-                            nthreads, sizeof(float), ch.sendSizes);
+                            nthreads, sizeof(float), ch.sendsizes);
     }
     if (rankinfo.recv) {
       calc_recvsize_channel(nranks, rankinfo.myrank, count, nchannels, i,
-                            nthreads, sizeof(float), ch.recvSizes);
+                            nthreads, sizeof(float), ch.recvsizes);
     }
-    ch.sendTail = 0;
-    ch.recvTail = 0;
+    ch.sendtail = 0;
+    ch.recvtail = 0;
     rankinfo.channels.push_back(ch);
   }
 }
@@ -322,11 +323,11 @@ ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int cid,
                                        int &size) {
   auto &ch = coordinator->ranks[coordinator->sendrank].channels[cid];
   auto &chrecv = coordinator->ranks[coordinator->recvrank].channels[cid];
-  if (ch.sendTail <= chrecv.recvTail) {
-    size = ch.sendSizes[ch.sendTail];
+  if (ch.sendtail <= chrecv.recvtail) {
+    size = ch.sendsizes[ch.sendtail];
   } else {
     size = -1;
-    LOG_MOD(NCCL_MOD, "sendTail=%d > recvTail=%d", ch.sendTail, ch.recvTail);
+    LOG_MOD(NCCL_MOD, "sendtail=%d > recvtail=%d", ch.sendtail, ch.recvtail);
   }
     LOG_MOD(NCCL_MOD, "modCoordinatorGetSendSize: size=%d", size);
     return ncclSuccess;
@@ -335,29 +336,29 @@ ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int cid,
 ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int cid,
                                 int size) {
   auto &ch = coordinator->ranks[coordinator->sendrank].channels[cid];
-  if (ch.sendSizes[ch.sendTail] == size) {
-    ch.sendTail++;
+  if (ch.sendsizes[ch.sendtail] == size) {
+    ch.sendtail++;
     update_done(coordinator);
   } else {
     LOG_MOD(NCCL_MOD, "send size unmatch actual: %d != expected: %d", size,
-            ch.sendSizes[ch.sendTail]);
+            ch.sendsizes[ch.sendtail]);
   }
-  LOG_MOD(NCCL_MOD, "modCoordinatorSend: size=%d, tail=%d", size, ch.sendTail);
+  LOG_MOD(NCCL_MOD, "modCoordinatorSend: size=%d, tail=%d", size, ch.sendtail);
   return ncclSuccess;
 }
 
 ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid,
                                 int size) {
   auto &ch = coordinator->ranks[coordinator->recvrank].channels[cid];
-  if (ch.recvSizes[ch.recvTail] == size) {
-    ch.recvTail++;
+  if (ch.recvsizes[ch.recvtail] == size) {
+    ch.recvtail++;
     update_done(coordinator);
   } else {
     LOG_MOD(NCCL_MOD, "recv size unmatch actual: %d != expected: %d", size,
-            ch.recvSizes[ch.recvTail]);
+            ch.recvsizes[ch.recvtail]);
   }
   LOG_MOD(NCCL_MOD, "modCoordinatorRecv: size=%d, recvtail=%d", size,
-          ch.recvTail);
+          ch.recvtail);
   return ncclSuccess;
 }
 
