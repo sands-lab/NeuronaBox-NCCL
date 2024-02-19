@@ -709,6 +709,7 @@ static ncclResult_t progressOps(struct ncclProxyState* proxyState, struct ncclPr
     if (op->state == ncclProxyOpNone) return ncclInternalError;
     TIME_START(0);
     TIME_START(1);
+    LOG_MOD(NCCL_MOD, "progress op %ld", op->unique_id);
     NCCLCHECK(op->progress(proxyState, op));
     if (op->idle) { TIME_STOP(1); TIME_CANCEL(0); } else { TIME_CANCEL(1); TIME_STOP(0); }
     *idle &= op->idle;
@@ -719,6 +720,7 @@ static ncclResult_t progressOps(struct ncclProxyState* proxyState, struct ncclPr
     } else {
       prevOp = op;
       op = op->next;
+      LOG_MOD(NCCL_MOD, "next op %lu", op);
     }
   }
   return ncclSuccess;
