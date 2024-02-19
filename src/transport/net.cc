@@ -1184,7 +1184,8 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
         int size = 0;
 
         if (bypass) {
-          modCoordinatorGetSendSize(&global_coordinator, sub->channelId, size);
+          modProxyGetSendSize(&global_controller, unique_id, sub->channelId,
+                              size);
         }
         if ((bypass && size != -1) || (!bypass && cond)) {
           // We have something to receive, let's check if it's completely ready.
@@ -1229,7 +1230,8 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
                       "sub%d:chan%d in send proxy progress, size is %d", s,
                       sub->channelId, size);
               if (bypass) {
-                modCoordinatorSend(&global_coordinator, sub->channelId, size);
+                modProxySend(&global_controller, unique_id, sub->channelId,
+                             size);
               }
               TRACE(NCCL_NET, "sendProxy [%ld/%d] Isend posted, req %p", sub->transmitted, buffSlot, sub->requests[buffSlot]);
               sizesFifo[buffSlot] = -1;
@@ -1407,7 +1409,8 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
             LOG_MOD(NCCL_MOD, "sub%d:chan%d, size is %d", s + i, sub->channelId,
                     sizes[i]);
             if (bypass) {
-              modCoordinatorRecv(&global_coordinator, sub->channelId, sizes[i]);
+              modProxyRecv(&global_controller, unique_id, sub->channelId,
+                           sizes[i]);
             }
             sub->received += args->sliceSteps;
             for (uint64_t step=sub->received-args->sliceSteps; step<sub->received; step++) ncclProfilingRecord(args, s+i, step, ncclProxyProfileRecvFlushWait);

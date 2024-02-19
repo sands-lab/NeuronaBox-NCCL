@@ -176,10 +176,10 @@ static ncclResult_t doLaunches(struct ncclComm* head) {
             NCCLCHECKGOTO(ncclLaunchKernelAfter_NoCuda(comm, plan), result, failure);
           }
 
-          if (bypass) {
-            NCCLCHECK(ncclModSync());
-            LOG_MOD(NCCL_MOD, "nccl kernel launch success and synced");
-          }
+          // if (bypass) {
+          //   NCCLCHECK(ncclModSync());
+          //   LOG_MOD(NCCL_MOD, "nccl kernel launch success and synced");
+          // }
         } else { // Final round.
           CUDACHECKGOTO(cudaSetDevice(comm->cudaDev), result, failure);
           NCCLCHECKGOTO(ncclLaunchFinish(comm), result, failure);

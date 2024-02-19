@@ -362,17 +362,17 @@ ncclResult_t modCoordinatorRecv(modCoordinator *coordinator, int cid,
   return ncclSuccess;
 }
 
-NCCL_API(ncclResult_t, ncclModSync);
+// NCCL_API(ncclResult_t, ncclModSync);
 
-ncclResult_t ncclModSync() {
-  LOG_MOD(NCCL_MOD, "ncclModSync Called");
-  if (MOD_KERNEL_BYPASS) {
-    while (global_coordinator.done == 0) {
-      sched_yield();
-    }
-    LOG_MOD(NCCL_MOD, "ncclModSync Done");
-    modCoordinatorDestroy(&global_coordinator);
-    modTopologyDestroy(&global_topology);
-  }
-  return ncclSuccess;
-}
+// ncclResult_t ncclModSync() {
+//   LOG_MOD(NCCL_MOD, "ncclModSync Called");
+//   if (MOD_KERNEL_BYPASS) {
+//     while (global_coordinator.done == 0) {
+//       sched_yield();
+//     }
+//     LOG_MOD(NCCL_MOD, "ncclModSync Done");
+//     modCoordinatorDestroy(&global_coordinator);
+//     modTopologyDestroy(&global_topology);
+//   }
+//   return ncclSuccess;
+// }

@@ -156,6 +156,8 @@ struct modController {
 
 ncclResult_t modAddTask(modController *controller, ncclInfo *info);
 
+ncclResult_t modInitTask(modController *controller, ncclInfo *info);
+
 ncclResult_t modQueryTask(modController *controller, uint64_t unique_id,
                           modTaskInfo *task);
 
@@ -165,5 +167,16 @@ ncclResult_t modBypassCheck(modController *controller, uint64_t unique_id,
                             int &bypass);
 
 ncclResult_t modGlobalInit(modController *controller, ncclComm *comm);
+
+// begin proxy
+
+ncclResult_t modProxyGetSendSize(modController *controller, int unique_id,
+                                 int cid, int &size);
+
+ncclResult_t modProxySend(modController *controller, int unique_id, int cid,
+                          int size);
+
+ncclResult_t modProxyRecv(modController *controller, int unique_id, int cid,
+                          int size);
 
 #endif // EMULATOR_H

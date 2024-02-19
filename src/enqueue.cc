@@ -14,6 +14,7 @@
 #include "gdrwrap.h"
 #include "include/checks.h"
 #include "include/debug.h"
+#include "include/emulator.h"
 #include "include/nccl_common.h"
 #include "transport.h"
 #include <cinttypes> // PRIx64
@@ -1482,10 +1483,9 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
   } else {
     LOG_MOD(NCCL_MOD, "Using Protocol Unknown!");
   }
-  // //! for now, initialize cooridnator here
-  // //! must init topology first!
+
+  modInitTask(&global_controller, info);
   // modTopologyInit(&global_topology, proxyOp, info);
-  // modCoordinatorInit(&global_coordinator, proxyOp, info);
   return ncclSuccess;
 }
 
