@@ -1066,7 +1066,7 @@ ncclResult_t ncclLaunchKernel(struct ncclComm *comm,
   //! emu
   int unique_id = plan->unique_id;
   int bypass = 0;
-  NCCLCHECK(modControllerCheck(&global_controller, unique_id, bypass));
+  NCCLCHECK(modBypassCheck(&global_controller, unique_id, bypass));
   LOG_MOD(NCCL_MOD, "nccl lanunch kernel, unique_id = %d, bypass = %d",
           unique_id, bypass);
 
@@ -1482,10 +1482,10 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
   } else {
     LOG_MOD(NCCL_MOD, "Using Protocol Unknown!");
   }
-  //! for now, initialize cooridnator here
-  //! must init topology first!
-  modTopologyInit(&global_topology, proxyOp, info);
-  modCoordinatorInit(&global_coordinator, proxyOp, info);
+  // //! for now, initialize cooridnator here
+  // //! must init topology first!
+  // modTopologyInit(&global_topology, proxyOp, info);
+  // modCoordinatorInit(&global_coordinator, proxyOp, info);
   return ncclSuccess;
 }
 
@@ -1678,7 +1678,7 @@ ncclResult_t ncclEnqueueCheck(struct ncclInfo* info) {
   int devOld = -1;
   printf("NCCL Enqueued: %s\n", info->opName);
   //! emu
-  NCCLCHECK(modControllerAddTask(&global_controller, info));
+  NCCLCHECK(modAddTask(&global_controller, info));
   LOG_MOD(NCCL_MOD, "New info unique_id %lu", info->unique_id);
 
   NCCLCHECKGOTO(PtrCheck(info->comm, info->opName, "comm"), ret, fail);

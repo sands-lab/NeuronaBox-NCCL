@@ -202,9 +202,9 @@ int emulatorTaskInit(modEmulatorTask *task, modCommInfo *comm, ncclInfo *info) {
   task->init = 1;
   task->done = 0;
   task->ranks = map<int, modRankInfo>();
-  task->sendrank = 0;
-  task->recvrank = 0;
-  //! here we assume 2 node, 1 rank per node
+  task->sendrank = comm->mynode;
+  task->recvrank = comm->mynode;
+  //! fix me here we assume 2 node, 1 rank per node
   for (int i = 0; i < comm->nrankpernode; ++i) {
     int rank = comm->nrankpernode * comm->mynode + i;
     modRankInfo rankinfo;
@@ -291,51 +291,69 @@ static uint64_t gen_unique_id() {
   return ++unique_id;
 }
 
-ncclResult_t modControllerAddTask(modController *controller, ncclInfo *info) {
+ncclResult_t modAddTask(modController *controller, ncclInfo *info) {
   modEmulatorTask task;
   info->unique_id = gen_unique_id();
   assert(controller->id2task.count(task.info.unique_id) == 0);
   emulatorTaskInit(&task, controller->comm, info);
   controller->id2task[task.info.unique_id] = task;
   controller->stream2ids[info->stream].push_back(task.info.unique_id);
-  LOG_MOD(NCCL_MOD, "modControllerAddTask for unique_id: %lu in stream %lu",
+  LOG_MOD(NCCL_MOD, "modAddTask for unique_id: %lu in stream %lu",
           task.info.unique_id, (uint64_t)info->stream);
   return ncclSuccess;
 }
 
-ncclResult_t modControllerQueryTask(modController *controller,
-                                    uint64_t unique_id, modTaskInfo *task) {
-  LOG_MOD(NCCL_MOD, "modControllerQueryTask for unique_id: %lu", unique_id);
+ncclResult_t modQueryTask(modController *controller, uint64_t unique_id,
+                          modTaskInfo *task) {
+  LOG_MOD(NCCL_MOD, "modQueryTask for unique_id: %lu", unique_id);
   auto it = controller->id2task.find(unique_id);
   if (it != controller->id2task.end()) {
     *task = it->second.info;
     return ncclSuccess;
   } else {
-    LOG_MOD(NCCL_LOG_WARN, "modControllerQueryTask: task not found");
+    LOG_MOD(NCCL_LOG_WARN, "modQueryTask: task not found");
     return ncclSuccess;
   }
 }
 
-ncclResult_t modControllerRemoveTask(modController *controller,
-                                     uint64_t unique_id) {
-  LOG_MOD(NCCL_MOD, "modControllerRemoveTask for unique_id: %lu", unique_id);
+ncclResult_t modRemoveTask(modController *controller, uint64_t unique_id) {
+  LOG_MOD(NCCL_MOD, "modRemoveTask for unique_id: %lu", unique_id);
   if (controller->id2task.count(unique_id) > 0) {
     controller->id2task.erase(unique_id);
     return ncclSuccess;
   } else {
-    LOG_MOD(NCCL_LOG_WARN, "modControllerRemoveTask: task not found");
+    LOG_MOD(NCCL_LOG_WARN, "modRemoveTask: task not found");
     abort();
     return ncclSuccess;
   }
 }
 
-ncclResult_t modControllerCheck(modController *controller, uint64_t unique_id,
-                                int &bypass) {
+ncclResult_t modBypassCheck(modController *controller, uint64_t unique_id,
+                            int &bypass) {
   assert(controller->id2task.count(unique_id) > 0);
   auto task = controller->id2task[unique_id];
   bypass = MOD_KERNEL_BYPASS && task.info.coll == ncclFuncAllReduce;
-  // LOG_MOD(NCCL_MOD, "modControllerCheck for unique_id: %lu, bypass = %d",
-  //         unique_id, bypass);
+  LOG_MOD(NCCL_MOD, "modBypassCheck for unique_id: %lu, bypass = %d", unique_id,
+          bypass);
+  return ncclSuccess;
+}
+
+ncclResult_t modGlobalInit(modController *controller, ncclComm *comm) {
+
+  controller->comm = new modCommInfo();
+  controller->comm->nranks = comm->nRanks;
+  controller->comm->mynode = MOD_MY_NODE;
+  controller->comm->nnodes = MOD_N_NODES;
+  controller->comm->nrankpernode = comm->nRanks / MOD_N_NODES;
+
+  controller->id2task = map<uint64_t, modEmulatorTask>();
+
+  controller->stream2ids = map<cudaStream_t, vector<uint64_t>>();
+
+  controller->coordinator = &global_coordinator;
+
+  controller->topology = &global_topology;
+  //! todo init topology and coordinator here!
 
   return ncclSuccess;
 }

@@ -1126,7 +1126,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
   if (args->state == ncclProxyOpProgress) {
     int unique_id = args->unique_id;
     int bypass = 0;
-    modControllerCheck(&global_controller, unique_id, bypass);
+    modBypassCheck(&global_controller, unique_id, bypass);
     LOG_MOD(NCCL_MOD, "send proxy progress unique_id = %d, bypass = %d",
             unique_id, bypass);
     int p = args->protocol;
@@ -1323,7 +1323,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
     //! emu
     int unique_id = args->unique_id;
     int bypass = 0;
-    modControllerCheck(&global_controller, unique_id, bypass);
+    modBypassCheck(&global_controller, unique_id, bypass);
     LOG_MOD(NCCL_MOD, "recv proxy progress unique_id = %d, bypass = %d",
             unique_id, bypass);
     int p = args->protocol;

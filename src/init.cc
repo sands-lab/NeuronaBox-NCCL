@@ -13,6 +13,7 @@
 #include "gdrwrap.h"
 #include "graph.h"
 #include "group.h"
+#include "include/emulator.h"
 #include "nccl.h"
 #include "net.h"
 #include "nvmlwrap.h"
@@ -1427,6 +1428,8 @@ static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
                 comm, comm->nRanks, (unsigned long long)hashUniqueId(job->commId), comm->rank, comm->cudaDev);
   }
 
+  LOG_MOD(NCCL_MOD, "mod emulator init global");
+  modGlobalInit(&global_controller, comm);
 
   INFO(NCCL_INIT,"comm %p rank %d nranks %d cudaDev %d nvmlDev %d busId %lx commId 0x%llx - Init COMPLETE", comm, comm->rank, comm->nRanks, comm->cudaDev, comm->nvmlDev, comm->busId, (unsigned long long)hashUniqueId(job->commId));
 exit:

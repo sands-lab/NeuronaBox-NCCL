@@ -154,16 +154,16 @@ struct modController {
   modCommInfo *comm;
 };
 
-ncclResult_t
-modControllerAddTask(modController *controller, ncclInfo *info);
+ncclResult_t modAddTask(modController *controller, ncclInfo *info);
 
-ncclResult_t modControllerQueryTask(modController *controller,
-                                    uint64_t unique_id, modTaskInfo *task);
+ncclResult_t modQueryTask(modController *controller, uint64_t unique_id,
+                          modTaskInfo *task);
 
-ncclResult_t modControllerRemoveTask(modController *controller,
-                                     uint64_t unique_id);
+ncclResult_t modRemoveTask(modController *controller, uint64_t unique_id);
 
-ncclResult_t modControllerCheck(modController *controller, uint64_t unique_id,
-                                int &bypass);
+ncclResult_t modBypassCheck(modController *controller, uint64_t unique_id,
+                            int &bypass);
+
+ncclResult_t modGlobalInit(modController *controller, ncclComm *comm);
 
 #endif // EMULATOR_H

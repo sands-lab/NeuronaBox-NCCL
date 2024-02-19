@@ -162,7 +162,7 @@ static ncclResult_t doLaunches(struct ncclComm* head) {
 
           int bypass = 0;
           NCCLCHECK(
-              modControllerCheck(&global_controller, plan->unique_id, bypass));
+              modBypassCheck(&global_controller, plan->unique_id, bypass));
 
           if (plan != nullptr) {
             comm->unlaunchedPlansHead = plan->next;
