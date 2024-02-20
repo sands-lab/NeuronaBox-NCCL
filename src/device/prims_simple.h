@@ -433,6 +433,7 @@ class Primitives<
       if (flags & RolePostRecv) {
         connStepPtr = conn->head;
         *connStepPtr = step; // Return credits in case we rounded up.
+        printf("[tid=%d] Update conn->head %p to %lu", tid, connStepPtr, step);
       }
       if (flags & RoleWaitRecv) {
         ncclShmem.groups[group].recvConns[index] = conn; // WaitRecv role saves since that's who needs it in setDataPtrs()

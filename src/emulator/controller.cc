@@ -165,6 +165,8 @@ static void channelInit(modChannelInfo *ch, modRankInfo *rankinfo, int nranks,
   }
   ch->sendtail = 0;
   ch->recvtail = 0;
+  ch->senddone = 0;
+  ch->recvdone = 0;
   LOG_MOD(NCCL_MOD, "channelInit: myrank=%d, chid=%d, send=%d, recv=%d",
           rankinfo->myrank, chid, ch->send, ch->recv);
 }
@@ -230,7 +232,7 @@ int emulatorTaskDestroy(modEmulatorTask *task) {
 
 static int check_done_ch(modChannelInfo *ch) {
   return ch->sendtail == ch->sendsizes.size() &&
-         ch->recvtail == ch->recvsizes.size();
+         ch->recvtail == ch->recvsizes.size() && ch->senddone && ch->recvdone;
 }
 
 static int check_done_rank(modRankInfo *rank) {
@@ -291,6 +293,7 @@ ncclResult_t ncclModStreamSyncFunc(modController *controller, cudaStream_t s) {
       flag = flag & syncTask(&task);
     }
     if (flag) {
+      LOG_MOD(NCCL_MOD, "ncclModStreamSyncFunc: all tasks are done");
       break;
     } else {
       sched_yield();
@@ -423,5 +426,30 @@ ncclResult_t modProxyRecv(modController *controller, int unique_id, int cid,
   LOG_MOD(NCCL_MOD, "modProxyRecv for unique_id: %d, cid: %d, size: %d",
 
           unique_id, cid, size);
+  return ncclSuccess;
+}
+
+ncclResult_t modProxySendDone(modController *controller, int unique_id,
+                              int cid) {
+  auto &task = controller->id2task[unique_id];
+  auto &rank = task.ranks[task.sendrank];
+  auto &ch = rank.channels[cid];
+  assert(ch.sendtail == ch.sendsizes.size() && ch.senddone == 0);
+  ch.senddone = 1;
+  LOG_MOD(NCCL_MOD, "modProxySendDone for unique_id: %d, cid: %d", unique_id,
+
+          cid);
+  return ncclSuccess;
+}
+
+ncclResult_t modProxyRecvDone(modController *controller, int unique_id,
+                              int cid) {
+  auto &task = controller->id2task[unique_id];
+  auto &rank = task.ranks[task.recvrank];
+  auto &ch = rank.channels[cid];
+  assert(ch.recvtail == ch.recvsizes.size() && ch.recvdone == 0);
+  ch.recvdone = 1;
+  LOG_MOD(NCCL_MOD, "modProxyRecvDone for unique_id: %d, cid: %d", unique_id,
+          cid);
   return ncclSuccess;
 }

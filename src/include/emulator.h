@@ -38,6 +38,8 @@ struct modChannelInfo {
   std::vector<int> recvsizes;
   int sendtail;
   int recvtail;
+  int senddone;
+  int recvdone;
 };
 
 // rank represents a gpu device
@@ -178,5 +180,11 @@ ncclResult_t modProxySend(modController *controller, int unique_id, int cid,
 
 ncclResult_t modProxyRecv(modController *controller, int unique_id, int cid,
                           int size);
+
+ncclResult_t modProxySendDone(modController *controller, int unique_id,
+                              int cid);
+
+ncclResult_t modProxyRecvDone(modController *controller, int unique_id,
+                              int cid);
 
 #endif // EMULATOR_H
