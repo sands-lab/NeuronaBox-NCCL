@@ -183,6 +183,9 @@ class Primitives<
   template<int Recv, int Send>
   inline __device__ void postPeer(bool dataStored) {
     if (flags & (Recv*RolePostRecv | Send*RolePostSend)) {
+      printf("[tid=%d] postPeer, step_previous=%lu, stored_value=%lu\n", tid,
+             step, step + StepPerSlice);
+
       step += StepPerSlice;
       if (Send && (flags & RolePostSend) && dataStored) fence_acq_rel_sys();
       st_relaxed_sys_global(connStepPtr, step);
@@ -432,8 +435,11 @@ class Primitives<
       step = roundUp(step, SlicePerChunk*StepPerSlice);
       if (flags & RolePostRecv) {
         connStepPtr = conn->head;
+        printf("[tid=%d] Try Update conn->head %p from %lu to %lu\n", tid,
+               connStepPtr, *connStepPtr, step);
         *connStepPtr = step; // Return credits in case we rounded up.
-        printf("[tid=%d] Update conn->head %p to %lu", tid, connStepPtr, step);
+        // printf("[tid=%d] Result conn->head = %lu step = %lu\n", tid,
+        //        *connStepPtr, step);
       }
       if (flags & RoleWaitRecv) {
         ncclShmem.groups[group].recvConns[index] = conn; // WaitRecv role saves since that's who needs it in setDataPtrs()
@@ -466,6 +472,9 @@ class Primitives<
         if (flags & OffsFifoEnabled)
           connOffsFifoPtr = conn->offsFifo;
         connEltsFifo = (T*)conn->buffs[NCCL_PROTO_SIMPLE];
+        printf("[tid=%d] Try Update conn->tail at %p = %lu; step = %lu, "
+               "conn->offsFifo\n",
+               tid, connStepPtr, connStepCache, step);
       }
     }
   }
@@ -480,6 +489,8 @@ class Primitives<
       step = roundUp(step, SlicePerChunk*StepPerSlice);
       if (flags & RolePostSend) {
         connStepPtr = conn->tail;
+        printf("[tid=%d] Try Update conn->tail %p from %lu to %lu\n", tid,
+               connStepPtr, *connStepPtr, step);
         connEltsFifo = (T*)conn->buffs[NCCL_PROTO_SIMPLE];
       }
       if (flags & RoleWaitSend) {
@@ -595,6 +606,8 @@ class Primitives<
     // Save steps for the next operation
     if (flags & (RolePostSend|RolePostRecv)) {
       auto *conns = (flags & RolePostSend) ? ncclShmem.groups[group].sendConns : ncclShmem.groups[group].recvConns;
+      printf("[tid=%d] Save step %lu to conn[%d] %lu\n", tid, step, index,
+             conns[index]->step);
       conns[index]->step = step;
     }
     
