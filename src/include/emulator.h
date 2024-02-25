@@ -154,6 +154,8 @@ struct modController {
   modCoordinator *coordinator;
   modTopology *topology;
   modCommInfo *comm;
+  uint64_t bypassed_send;
+  uint64_t bypassed_recv;
 };
 
 ncclResult_t modAddTask(modController *controller, ncclInfo *info);
@@ -181,10 +183,16 @@ ncclResult_t modProxySend(modController *controller, int unique_id, int cid,
 ncclResult_t modProxyRecv(modController *controller, int unique_id, int cid,
                           int size);
 
-ncclResult_t modProxySendDone(modController *controller, int unique_id,
-                              int cid);
+ncclResult_t modProxySendDone(modController *controller, int unique_id, int cid,
+                              int bypassed);
 
-ncclResult_t modProxyRecvDone(modController *controller, int unique_id,
-                              int cid);
+ncclResult_t modProxyRecvDone(modController *controller, int unique_id, int cid,
+                              int bypassed);
+
+ncclResult_t modProxyBypassedSend(modController *controller, int unique_id,
+                                  int cid, int &bypassed);
+
+ncclResult_t modProxyBypassedRecv(modController *controller, int unique_id,
+                                  int cid, int &bypassed);
 
 #endif // EMULATOR_H

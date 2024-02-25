@@ -429,27 +429,41 @@ ncclResult_t modProxyRecv(modController *controller, int unique_id, int cid,
   return ncclSuccess;
 }
 
-ncclResult_t modProxySendDone(modController *controller, int unique_id,
-                              int cid) {
+ncclResult_t modProxySendDone(modController *controller, int unique_id, int cid,
+                              int bypassed) {
   auto &task = controller->id2task[unique_id];
   auto &rank = task.ranks[task.sendrank];
   auto &ch = rank.channels[cid];
   assert(ch.sendtail == ch.sendsizes.size() && ch.senddone == 0);
   ch.senddone = 1;
-  LOG_MOD(NCCL_MOD, "modProxySendDone for unique_id: %d, cid: %d", unique_id,
+  controller->bypassed_send += bypassed;
 
-          cid);
+  LOG_MOD(NCCL_MOD, "modProxySendDone for unique_id: %d, cid: %d, inc = %d",
+          unique_id, cid, bypassed);
   return ncclSuccess;
 }
 
-ncclResult_t modProxyRecvDone(modController *controller, int unique_id,
-                              int cid) {
+ncclResult_t modProxyRecvDone(modController *controller, int unique_id, int cid,
+                              int bypassed) {
   auto &task = controller->id2task[unique_id];
   auto &rank = task.ranks[task.recvrank];
   auto &ch = rank.channels[cid];
   assert(ch.recvtail == ch.recvsizes.size() && ch.recvdone == 0);
   ch.recvdone = 1;
-  LOG_MOD(NCCL_MOD, "modProxyRecvDone for unique_id: %d, cid: %d", unique_id,
-          cid);
+  controller->bypassed_recv += bypassed;
+  LOG_MOD(NCCL_MOD, "modProxyRecvDone for unique_id: %d, cid: %d, inc = %d",
+          unique_id, cid, bypassed);
+  return ncclSuccess;
+}
+
+ncclResult_t modProxyBypassedSend(modController *controller, int unique_id,
+                                  int cid, int &bypassed) {
+  bypassed = controller->bypassed_send;
+  return ncclSuccess;
+}
+
+ncclResult_t modProxyBypassedRecv(modController *controller, int unique_id,
+                                  int cid, int &bypassed) {
+  bypassed = controller->bypassed_recv;
   return ncclSuccess;
 }
