@@ -327,6 +327,12 @@ ncclResult_t modInitTask(modController *controller, ncclInfo *info) {
   assert(controller->id2task.count(unique_id) == 0);
   emulatorTaskInit(&task, controller->comm, info);
   controller->id2task[task.info.unique_id] = task;
+  int nchannels = task.info.nchannels;
+  for (int i = 0; i < nchannels; ++i) {
+    if (controller->cid2bypassed.count(i) == 0) {
+      controller->cid2bypassed[i] = make_pair(0, 0);
+    }
+  }
   LOG_MOD(NCCL_MOD, "modInitTask for unique_id: %lu", task.info.unique_id);
   return ncclSuccess;
 }
@@ -436,8 +442,8 @@ ncclResult_t modProxySendDone(modController *controller, int unique_id, int cid,
   auto &ch = rank.channels[cid];
   assert(ch.sendtail == ch.sendsizes.size() && ch.senddone == 0);
   ch.senddone = 1;
-  controller->bypassed_send += bypassed;
-
+  auto &c = controller->cid2bypassed[cid];
+  c.first += bypassed;
   LOG_MOD(NCCL_MOD, "modProxySendDone for unique_id: %d, cid: %d, inc = %d",
           unique_id, cid, bypassed);
   return ncclSuccess;
@@ -450,7 +456,8 @@ ncclResult_t modProxyRecvDone(modController *controller, int unique_id, int cid,
   auto &ch = rank.channels[cid];
   assert(ch.recvtail == ch.recvsizes.size() && ch.recvdone == 0);
   ch.recvdone = 1;
-  controller->bypassed_recv += bypassed;
+  auto &c = controller->cid2bypassed[cid];
+  c.second += bypassed;
   LOG_MOD(NCCL_MOD, "modProxyRecvDone for unique_id: %d, cid: %d, inc = %d",
           unique_id, cid, bypassed);
   return ncclSuccess;
@@ -458,12 +465,14 @@ ncclResult_t modProxyRecvDone(modController *controller, int unique_id, int cid,
 
 ncclResult_t modProxyBypassedSend(modController *controller, int unique_id,
                                   int cid, int &bypassed) {
-  bypassed = controller->bypassed_send;
+  auto &c = controller->cid2bypassed[cid];
+  bypassed = c.first; // recv
   return ncclSuccess;
 }
 
 ncclResult_t modProxyBypassedRecv(modController *controller, int unique_id,
                                   int cid, int &bypassed) {
-  bypassed = controller->bypassed_recv;
+  auto &c = controller->cid2bypassed[cid];
+  bypassed = c.second; // recv
   return ncclSuccess;
 }

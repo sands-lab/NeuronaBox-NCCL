@@ -151,6 +151,7 @@ ncclResult_t modTopologyDestroy(modTopology *topology);
 struct modController {
   std::map<uint64_t, modEmulatorTask> id2task;
   std::map<cudaStream_t, std::vector<uint64_t>> stream2ids;
+  std::map<int, std::pair<int, int>> cid2bypassed; // cid: <send, recv>
   modCoordinator *coordinator;
   modTopology *topology;
   modCommInfo *comm;
