@@ -1194,8 +1194,8 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
         LOG_MOD(NCCL_MOD,
                 "[%d;%d]send sizesFifo[%d] = %d, recvTail + bypassed = %ld, "
                 "addr = %p, "
-                "base = %d, "
-                "transmitted = %d, bypass = %d, cond = %d",
+                "base = %ld, "
+                "transmitted = %ld, bypass = %d, cond = %d",
                 unique_id, bypass, buffSlot, sizesFifo[buffSlot], done,
                 recvTail, sub->base, sub->transmitted, bypass, cond);
         if (bypass) {
@@ -1311,7 +1311,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
     int maxRecvs = 1;
     for (int s=0; s<args->nsubs; s++) {
       struct ncclProxySubArgs* sub = args->subs+s;
-      LOG_MOD(NCCL_MOD, "sub%d, nbytes%lu, nsteps%lu, channelid%d\n", s,
+      LOG_MOD(NCCL_MOD, "sub%d, nbytes%lu, nsteps%d, channelid%d\n", s,
               sub->nbytes, sub->nsteps, sub->channelId);
       if (groupSize == maxRecvs) {
         groupSize = 0;
@@ -1556,7 +1556,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
               if (bypass) {
                 LOG_MOD(NCCL_MOD,
                         "[%d;%d]recv done bypass update, *sendhead = %lu += "
-                        "step = %lu",
+                        "step = %d",
                         unique_id, bypass, resources->sendMem->head,
                         sub->nsteps);
                 // resources->sendMem->head += sub->nsteps;
