@@ -1669,6 +1669,7 @@ static ncclResult_t taskAppend(struct ncclComm* comm, struct ncclInfo const* inf
       l = l->next;
     }
   }
+  LOG_MOD(NCCL_MOD, "End of taskAppend");
   return ncclSuccess;
 }
 
@@ -1676,10 +1677,11 @@ ncclResult_t ncclEnqueueCheck(struct ncclInfo* info) {
   NCCLCHECK(ncclGroupStartInternal());
   ncclResult_t ret = ncclSuccess;
   int devOld = -1;
-  printf("NCCL Enqueued: %s\n", info->opName);
   //! emu
   NCCLCHECK(modAddTask(&global_controller, info));
   LOG_MOD(NCCL_MOD, "New info unique_id %lu", info->unique_id);
+  printf("[nccl] enqueued: %s @stream: %d id:%lu\n", info->opName,
+         global_controller.stream2int[info->stream], info->unique_id);
 
   NCCLCHECKGOTO(PtrCheck(info->comm, info->opName, "comm"), ret, fail);
   // Check whether communicator is ready to communicate

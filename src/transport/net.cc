@@ -1172,7 +1172,11 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
       }
       // Check whether we received data from the GPU and send it to the network
       if (sub->transmitted < sub->posted && sub->transmitted < sub->done + NCCL_STEPS) {
-        int buffSlot = (sub->base+sub->transmitted)%NCCL_STEPS;
+        int bypassed = 0;
+        NCCLCHECK(modProxyBypassedSend(&global_controller, unique_id,
+                                       sub->channelId, bypassed));
+
+        int buffSlot = (sub->base + sub->transmitted - bypassed) % NCCL_STEPS;
         volatile int* sizesFifo = resources->recvMem->sizesFifo;
         volatile uint64_t* recvTail = &resources->recvMem->tail;
         //! mod here, recvMem is accessble on GPU side, kernel will modify that
@@ -1183,21 +1187,19 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
         //! part has finished its work
         //! if (sizesFifo[buffSlot] != -1 &&
         //! ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL))
-        int bypassed = 0;
-        NCCLCHECK(modProxyBypassedSend(&global_controller, unique_id,
-                                       sub->channelId, bypassed));
         uint64_t done = *recvTail + bypassed;
         bool cond =
             sizesFifo[buffSlot] != -1 &&
             ((done > (sub->base + sub->transmitted)) || p == NCCL_PROTO_LL);
         int size = 0;
         LOG_MOD(NCCL_MOD,
-                "[%d;%d]send sizesFifo[%d] = %d, recvTail + bypassed = %ld, "
+                "[%d;%d]send sizesFifo[%d] = %d, bypassed = %d, recvTail + "
+                "bypassed = %ld, "
                 "addr = %p, "
                 "base = %ld, "
-                "transmitted = %ld, bypass = %d, cond = %d",
-                unique_id, bypass, buffSlot, sizesFifo[buffSlot], done,
-                recvTail, sub->base, sub->transmitted, bypass, cond);
+                "transmitted = %ld, cond = %d",
+                unique_id, bypass, buffSlot, sizesFifo[buffSlot], bypassed,
+                done, recvTail, sub->base, sub->transmitted, cond);
         if (bypass) {
           modProxyGetSendSize(&global_controller, unique_id, sub->channelId,
                               size);

@@ -265,12 +265,11 @@ static int check_done_task(modEmulatorTask *task) {
 }
 
 int syncTask(modEmulatorTask *task) {
-  check_done_task(task);
   if (task->done == 1) {
-    emulatorTaskDestroy(task);
     return 1;
   } else {
-    return 0;
+    check_done_task(task);
+    return task->done;
   }
 }
 
@@ -279,9 +278,13 @@ ncclResult_t ncclModStreamSyncFunc(modController *controller, cudaStream_t s) {
     LOG_MOD(NCCL_MOD, "ncclModStreamSyncFunc: bypass is off, return");
     return ncclSuccess;
   }
-  assert(controller->stream2ids.count(s) > 0);
+  if (controller->stream2ids.count(s) == 0) {
+    LOG_MOD(NCCL_LOG_WARN, "ncclModStreamSyncFunc: stream not found");
+    return ncclSuccess;
+  }
 
   auto ids = controller->stream2ids[s];
+
   int flag = 1;
   while (1) {
     flag = 1;
@@ -293,12 +296,13 @@ ncclResult_t ncclModStreamSyncFunc(modController *controller, cudaStream_t s) {
       flag = flag & syncTask(&task);
     }
     if (flag) {
-      LOG_MOD(NCCL_MOD, "ncclModStreamSyncFunc: all tasks are done");
+      LOG_MOD(NCCL_MOD, "ncclModStreamSyncFunc: all bypassed tasks are done");
       break;
     } else {
       sched_yield();
     }
   }
+
   return ncclSuccess;
 }
 
@@ -312,10 +316,17 @@ static uint64_t gen_unique_id() {
   return ++unique_id;
 }
 
+static int gen_stream_id() {
+  static int stream_id = 0;
+  return ++stream_id;
+}
+
 ncclResult_t modAddTask(modController *controller, ncclInfo *info) {
   info->unique_id = gen_unique_id();
   controller->stream2ids[info->stream].push_back(info->unique_id);
-
+  if (controller->stream2int.count(info->stream) == 0) {
+    controller->stream2int[info->stream] = gen_stream_id();
+  }
   LOG_MOD(NCCL_MOD, "modAddTask for unique_id: %lu in stream %lu",
           info->unique_id, (uint64_t)info->stream);
   return ncclSuccess;
@@ -324,6 +335,7 @@ ncclResult_t modAddTask(modController *controller, ncclInfo *info) {
 ncclResult_t modInitTask(modController *controller, ncclInfo *info) {
   modEmulatorTask task;
   auto unique_id = info->unique_id;
+  LOG_MOD(NCCL_MOD, "modInitTask for unique_id: %lu", unique_id);
   assert(controller->id2task.count(unique_id) == 0);
   emulatorTaskInit(&task, controller->comm, info);
   controller->id2task[task.info.unique_id] = task;
@@ -333,7 +345,6 @@ ncclResult_t modInitTask(modController *controller, ncclInfo *info) {
       controller->cid2bypassed[i] = make_pair(0, 0);
     }
   }
-  LOG_MOD(NCCL_MOD, "modInitTask for unique_id: %lu", task.info.unique_id);
   return ncclSuccess;
 }
 
@@ -394,7 +405,7 @@ ncclResult_t modGlobalInit(modController *controller, ncclComm *comm) {
 
 ncclResult_t modProxyGetSendSize(modController *controller, int unique_id,
                                  int cid, int &size) {
-
+  assert(controller->id2task.count(unique_id) > 0);
   auto &task = controller->id2task[unique_id];
   auto &rank = task.ranks[task.sendrank];
   auto &recvch = task.ranks[task.recvrank].channels[cid];
@@ -412,6 +423,7 @@ ncclResult_t modProxyGetSendSize(modController *controller, int unique_id,
 
 ncclResult_t modProxySend(modController *controller, int unique_id, int cid,
                           int size) {
+  assert(controller->id2task.count(unique_id) > 0);
   auto &task = controller->id2task[unique_id];
   auto &rank = task.ranks[task.sendrank];
   auto &ch = rank.channels[cid];
@@ -424,6 +436,7 @@ ncclResult_t modProxySend(modController *controller, int unique_id, int cid,
 
 ncclResult_t modProxyRecv(modController *controller, int unique_id, int cid,
                           int size) {
+  assert(controller->id2task.count(unique_id) > 0);
   auto &task = controller->id2task[unique_id];
   auto &rank = task.ranks[task.recvrank];
   auto &ch = rank.channels[cid];
@@ -437,6 +450,7 @@ ncclResult_t modProxyRecv(modController *controller, int unique_id, int cid,
 
 ncclResult_t modProxySendDone(modController *controller, int unique_id, int cid,
                               int bypassed) {
+  assert(controller->id2task.count(unique_id) > 0);
   auto &task = controller->id2task[unique_id];
   auto &rank = task.ranks[task.sendrank];
   auto &ch = rank.channels[cid];
@@ -451,6 +465,7 @@ ncclResult_t modProxySendDone(modController *controller, int unique_id, int cid,
 
 ncclResult_t modProxyRecvDone(modController *controller, int unique_id, int cid,
                               int bypassed) {
+  assert(controller->id2task.count(unique_id) > 0);
   auto &task = controller->id2task[unique_id];
   auto &rank = task.ranks[task.recvrank];
   auto &ch = rank.channels[cid];

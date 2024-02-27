@@ -384,7 +384,7 @@ fail:
 
 ncclResult_t ncclGroupEndInternal() {
   ncclResult_t ret = ncclSuccess;
-
+  LOG_MOD(NCCL_MOD, "ncclGroupEndInternal");
   if (ncclGroupDepth == 0) {
     WARN("ncclGroupEnd: not in a group call.");
     ret = ncclInvalidUsage;
@@ -439,6 +439,7 @@ ncclResult_t ncclGroupEndInternal() {
     }
   }
 exit:
+  LOG_MOD(NCCL_MOD, "ncclGroupEndInternal Exit");
   return ret;
 fail:
   groupCleanup(&ncclGroupCommHead, &ncclGroupCommPreconnectHead, &ncclAsyncJobs, &ncclGroupError, &ncclGroupBlocking, &ncclGroupJobAbortFlag, ret);

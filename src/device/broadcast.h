@@ -45,12 +45,19 @@ namespace {
       int nelem = min(realChunkSize, size-offset);
 
       if (rank == root) {
+        if (tid == 0) {
+          printf("Broadcast @root offset %ld nelem %d\n", root, offset, nelem);
+        }
         if (inputBuf == outputBuf) {
           prims.send(offset, nelem);
         } else {
           prims.copySend(offset, offset, nelem);
         }
       } else if (nextRank == root) {
+        if (tid == 0) {
+          printf("Broadcast @next_to_root offset %ld nelem %d\n", root, offset,
+                 nelem);
+        }
         prims.recv(offset, nelem);
       } else {
         prims.recvCopySend(offset, nelem);
