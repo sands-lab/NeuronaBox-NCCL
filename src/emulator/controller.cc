@@ -290,7 +290,7 @@ ncclResult_t ncclModStreamSyncFunc(modController *controller, cudaStream_t s) {
     flag = 1;
     for (auto i : ids) {
       auto &task = controller->id2task[i];
-      if (task.info.coll != ncclFuncAllReduce) {
+      if (!task.info.bypass) {
         continue;
       }
       flag = flag & syncTask(&task);
@@ -377,7 +377,10 @@ ncclResult_t modBypassCheck(modController *controller, uint64_t unique_id,
                             int &bypass) {
   assert(controller->id2task.count(unique_id) > 0);
   auto &task = controller->id2task[unique_id];
-  bypass = MOD_KERNEL_BYPASS && task.info.coll == ncclFuncAllReduce;
+  bypass =
+      MOD_KERNEL_BYPASS && task.info.coll == ncclFuncAllReduce && unique_id > 6;
+  task.info.bypass = bypass;
+  //! fix me
   LOG_MOD(NCCL_MOD, "modBypassCheck for unique_id: %lu, bypass = %d", unique_id,
           bypass);
   return ncclSuccess;

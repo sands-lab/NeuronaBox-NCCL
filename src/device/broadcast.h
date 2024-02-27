@@ -46,7 +46,8 @@ namespace {
 
       if (rank == root) {
         if (tid == 0) {
-          printf("Broadcast @root offset %ld nelem %d\n", root, offset, nelem);
+          printf("[nccl] Broadcast @root offset %d nelem %ld\n", root, offset,
+                 nelem);
         }
         if (inputBuf == outputBuf) {
           prims.send(offset, nelem);
@@ -55,8 +56,8 @@ namespace {
         }
       } else if (nextRank == root) {
         if (tid == 0) {
-          printf("Broadcast @next_to_root offset %ld nelem %d\n", root, offset,
-                 nelem);
+          printf("[nccl] Broadcast @next_to_root offset %d nelem %ld\n", root,
+                 offset, nelem);
         }
         prims.recv(offset, nelem);
       } else {

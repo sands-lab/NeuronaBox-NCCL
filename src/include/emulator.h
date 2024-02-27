@@ -70,6 +70,7 @@ struct modTaskInfo {
   int nchannels;
   int nthreads;
   uint64_t unique_id;
+  int bypass;
 };
 
 struct modEmulatorTask {

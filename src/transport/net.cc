@@ -1176,7 +1176,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
         NCCLCHECK(modProxyBypassedSend(&global_controller, unique_id,
                                        sub->channelId, bypassed));
 
-        int buffSlot = (sub->base + sub->transmitted - bypassed) % NCCL_STEPS;
+        int buffSlot = (sub->base + sub->transmitted) % NCCL_STEPS;
         volatile int* sizesFifo = resources->recvMem->sizesFifo;
         volatile uint64_t* recvTail = &resources->recvMem->tail;
         //! mod here, recvMem is accessble on GPU side, kernel will modify that
@@ -1187,7 +1187,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
         //! part has finished its work
         //! if (sizesFifo[buffSlot] != -1 &&
         //! ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL))
-        uint64_t done = *recvTail + bypassed;
+        uint64_t done = *recvTail; //+ bypassed;
         bool cond =
             sizesFifo[buffSlot] != -1 &&
             ((done > (sub->base + sub->transmitted)) || p == NCCL_PROTO_LL);
@@ -1528,7 +1528,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
           int bypassed = 0;
           NCCLCHECK(modProxyBypassedRecv(&global_controller, unique_id,
                                          sub->channelId, bypassed));
-          uint64_t done = *sendHead + bypassed;
+          uint64_t done = *sendHead; //+ bypassed;
           bool left_cond = bypass || (done > sub->base + sub->done);
           LOG_MOD(NCCL_MOD,
                   "[%d;%d]recv proxy progress, *sendhead + bypass = %lu, addr "

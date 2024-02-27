@@ -143,10 +143,10 @@ class Primitives<
     if (flags & (Recv*RoleWaitRecv | Send*RoleWaitSend)) {
       if (isSendNotRecv && (flags & SizesFifoEnabled)) {
         connSizesFifoPtr[step%NCCL_STEPS] = nelts*sizeof(T);
-        printf("[tid=%d] WaitPeer, step=%lu, offset=%d, nelts=%d, "
-               "sizeof<T>=%lu, coonSizesFifoPtr[%lu]=%d\n",
-               tid, step, offset, nelts, sizeof(T), step % NCCL_STEPS,
-               connSizesFifoPtr[step % NCCL_STEPS]);
+        // printf("[tid=%d] WaitPeer, step=%lu, offset=%d, nelts=%d, "
+        //        "sizeof<T>=%lu, coonSizesFifoPtr[%lu]=%d\n",
+        //        tid, step, offset, nelts, sizeof(T), step % NCCL_STEPS,
+        //        connSizesFifoPtr[step % NCCL_STEPS]);
       }
 
       void **ptrs = isSendNotRecv ? (ncclShmem.groups[group].dsts + Dst)
@@ -429,9 +429,10 @@ class Primitives<
         flags |= NetDeviceUnpack;
       }
       step = conn->step;
-      printf(
-          "[tid %d]:loadRecvConn step=%lu, tail=%p, head=%p, buff[simple]=%p\n",
-          tid, step, conn->tail, conn->head, conn->buffs[NCCL_PROTO_SIMPLE]);
+      // printf(
+      //     "[tid %d]:loadRecvConn step=%lu, tail=%p, head=%p,
+      //     buff[simple]=%p\n", tid, step, conn->tail, conn->head,
+      //     conn->buffs[NCCL_PROTO_SIMPLE]);
 
       step = roundUp(step, SlicePerChunk*StepPerSlice);
       if (flags & RolePostRecv) {
@@ -484,9 +485,10 @@ class Primitives<
     if (flags & (RoleWaitSend|RolePostSend)) {
       auto *conn = &peer->send[connIndex];
       step = conn->step;
-      printf(
-          "[tid %d]:loadSendConn step=%lu, tail=%p, head=%p, buff[simple]=%p\n",
-          tid, step, conn->tail, conn->head, conn->buffs[NCCL_PROTO_SIMPLE]);
+      // printf(
+      //     "[tid %d]:loadSendConn step=%lu, tail=%p, head=%p,
+      //     buff[simple]=%p\n", tid, step, conn->tail, conn->head,
+      //     conn->buffs[NCCL_PROTO_SIMPLE]);
 
       step = roundUp(step, SlicePerChunk*StepPerSlice);
       if (flags & RolePostSend) {
