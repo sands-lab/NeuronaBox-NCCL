@@ -32,13 +32,14 @@ __device__ __forceinline__ void runRing(ncclWorkElem *args) {
     // smoother. Might be a bug somewhere.
     minChunkSize = nthreads * (Proto::calcBytePerGrain() / sizeof(T)) / 2;
   }
-  // if (tid == 0) {
-  //   printf("[tid=0] inside all reduce run_ring! nthread=%d, proto:id=%d "
-  //          "chunkSize=%lu, minChunkSize=%d sizeof(T)=%lu, loopsize=%lu, "
-  //          "bid=%d, count=%lu, ringix=%d\n",
-  //          nthreads, Proto::Id, chunkSize, minChunkSize, sizeof(T), loopSize,
-  //          bid, size, ringIx);
-  // }
+  if (tid == 0) {
+    printf("[kernel] all reduce ring\n");
+    // printf("[tid=0] inside all reduce run_ring! nthread=%d, proto:id=%d "
+    //        "chunkSize=%lu, minChunkSize=%d sizeof(T)=%lu, loopsize=%lu, "
+    //        "bid=%d, count=%lu, ringix=%d\n",
+    //        nthreads, Proto::Id, chunkSize, minChunkSize, sizeof(T), loopSize,
+    //        bid, size, ringIx);
+  }
   /*
 
     __device__ Primitives(
