@@ -274,7 +274,7 @@ int syncTask(modEmulatorTask *task) {
 }
 
 ncclResult_t ncclModStreamSyncFunc(modController *controller, cudaStream_t s) {
-  if (!MOD_KERNEL_BYPASS) {
+  if (MOD_KERNEL_BYPASS != 1) {
     LOG_MOD(NCCL_MOD, "ncclModStreamSyncFunc: bypass is off, return");
     return ncclSuccess;
   }
@@ -378,7 +378,7 @@ ncclResult_t modBypassCheck(modController *controller, uint64_t unique_id,
   assert(controller->id2task.count(unique_id) > 0);
   auto &task = controller->id2task[unique_id];
   bypass =
-      MOD_KERNEL_BYPASS && task.info.coll == ncclFuncAllReduce && unique_id > 6;
+      MOD_KERNEL_BYPASS == 1 && task.info.coll == ncclFuncAllReduce && unique_id > 6;
   task.info.bypass = bypass;
   //! fix me
   LOG_MOD(NCCL_MOD, "modBypassCheck for unique_id: %lu, bypass = %d", unique_id,
