@@ -377,8 +377,8 @@ ncclResult_t modBypassCheck(modController *controller, uint64_t unique_id,
                             int &bypass) {
   assert(controller->id2task.count(unique_id) > 0);
   auto &task = controller->id2task[unique_id];
-  bypass =
-      MOD_KERNEL_BYPASS == 1 && task.info.coll == ncclFuncAllReduce && unique_id > 6;
+  bypass = MOD_KERNEL_BYPASS == 1 && task.info.coll == ncclFuncAllReduce &&
+           unique_id > 32;
   task.info.bypass = bypass;
   //! fix me
   LOG_MOD(NCCL_MOD, "modBypassCheck for unique_id: %lu, bypass = %d", unique_id,
