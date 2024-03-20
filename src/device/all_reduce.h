@@ -33,7 +33,7 @@ __device__ __forceinline__ void runRing(ncclWorkElem *args) {
     minChunkSize = nthreads * (Proto::calcBytePerGrain() / sizeof(T)) / 2;
   }
   if (tid == 0) {
-    printf("[kernel] all reduce ring\n");
+    // printf("[kernel] all reduce ring\n");
     // printf("[tid=0] inside all reduce run_ring! nthread=%d, proto:id=%d "
     //        "chunkSize=%lu, minChunkSize=%d sizeof(T)=%lu, loopsize=%lu, "
     //        "bid=%d, count=%lu, ringix=%d\n",
@@ -128,11 +128,11 @@ __device__ __forceinline__ void runRing(ncclWorkElem *args) {
       chunk = modRanks(ringIx + nranks - j);
       offset = calcOffset(chunk);
       nelem = min(realChunkSize, size - offset);
-      if (tid == 8) {
-        printf("[tid=%d][all_reduce.h] directRecvCopySend to next gpu, "
-               "chunk=%d, offset=%lu, nelem=%d\n",
-               tid, chunk, offset, nelem);
-      }
+      // if (tid == 8) {
+      //   printf("[tid=%d][all_reduce.h] directRecvCopySend to next gpu, "
+      //          "chunk=%d, offset=%lu, nelem=%d\n",
+      //          tid, chunk, offset, nelem);
+      // }
       prims.directRecvCopySend(offset, nelem);
     }
 
