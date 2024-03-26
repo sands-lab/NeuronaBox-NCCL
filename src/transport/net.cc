@@ -1173,8 +1173,8 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
       // Check whether we received data from the GPU and send it to the network
       if (sub->transmitted < sub->posted && sub->transmitted < sub->done + NCCL_STEPS) {
         int bypassed = 0;
-        NCCLCHECK(modProxyBypassedSend(&global_controller, unique_id,
-                                       sub->channelId, bypassed));
+        modProxyBypassedSend(&global_controller, unique_id, sub->channelId,
+                             bypassed);
 
         int buffSlot = (sub->base + sub->transmitted) % NCCL_STEPS;
         volatile int* sizesFifo = resources->recvMem->sizesFifo;
@@ -1526,8 +1526,8 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
           // uint64_t done = *sendHead;
           //! mod here
           int bypassed = 0;
-          NCCLCHECK(modProxyBypassedRecv(&global_controller, unique_id,
-                                         sub->channelId, bypassed));
+          modProxyBypassedRecv(&global_controller, unique_id, sub->channelId,
+                               bypassed);
           uint64_t done = *sendHead; //+ bypassed;
           bool left_cond = bypass || (done > sub->base + sub->done);
           LOG_MOD(NCCL_MOD,

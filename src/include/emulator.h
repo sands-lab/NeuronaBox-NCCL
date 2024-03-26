@@ -177,25 +177,23 @@ ncclResult_t modGlobalInit(modController *controller, ncclComm *comm);
 
 // begin proxy
 
-ncclResult_t modProxyGetSendSize(modController *controller, int unique_id,
-                                 int cid, int &size);
+int modProxyGetSendSize(modController *controller, int unique_id, int cid,
+                        int &size);
 
-ncclResult_t modProxySend(modController *controller, int unique_id, int cid,
-                          int size);
+int modProxySend(modController *controller, int unique_id, int cid, int size);
 
-ncclResult_t modProxyRecv(modController *controller, int unique_id, int cid,
-                          int size);
+int modProxyRecv(modController *controller, int unique_id, int cid, int size);
 
-ncclResult_t modProxySendDone(modController *controller, int unique_id, int cid,
-                              int bypassed);
+int modProxySendDone(modController *controller, int unique_id, int cid,
+                     int bypassed);
 
-ncclResult_t modProxyRecvDone(modController *controller, int unique_id, int cid,
-                              int bypassed);
+int modProxyRecvDone(modController *controller, int unique_id, int cid,
+                     int bypassed);
 
-ncclResult_t modProxyBypassedSend(modController *controller, int unique_id,
-                                  int cid, int &bypassed);
+int modProxyBypassedSend(modController *controller, int unique_id, int cid,
+                         int &bypassed);
 
-ncclResult_t modProxyBypassedRecv(modController *controller, int unique_id,
-                                  int cid, int &bypassed);
+int modProxyBypassedRecv(modController *controller, int unique_id, int cid,
+                         int &bypassed);
 
 #endif // EMULATOR_H
