@@ -249,9 +249,8 @@ emulatorTaskDestroy(modEmulatorTask *task) {
 static inline __attribute__((always_inline)) int
 check_done_ch(modChannelInfo *ch) {
   return ch->sendtail == ch->sendsizes.size() && ch->senddone;
-  // return ch->sendtail == ch->sendsizes.size() &&
-  //        ch->recvtail == ch->recvsizes.size() && ch->senddone &&
-  //        ch->recvdone;
+  return ch->sendtail == ch->sendsizes.size() &&
+         ch->recvtail == ch->recvsizes.size() && ch->senddone && ch->recvdone;
 }
 
 static inline __attribute__((always_inline)) int
@@ -423,13 +422,13 @@ ncclResult_t modRemoveTask(modController *controller, uint64_t unique_id) {
 
 ncclResult_t modBypassCheck(modController *controller, uint64_t unique_id,
                             int &bypass) {
-  if (controller->id2task.count(unique_id) <= 0) {
+  while (controller->id2task.count(unique_id) <= 0) {
     // LOG_MOD(NCCL_MOD, "modBypassCheck: task for unique_id: %lu not
     // recorded!",
     //         unique_id);
-    // fprintf(stderr, "modBypassCheck: task for unique_id: %lu not
-    // recorded!\n",
-    //         unique_id);
+    fprintf(stderr, "modBypassCheck: task for unique_id: %lu not recorded !\n",
+            unique_id);
+    usleep(10);
   }
   assert(controller->id2task.count(unique_id) > 0);
   auto &task = controller->id2task[unique_id];
@@ -471,11 +470,11 @@ modProxyGetSendSize(modController *controller, int unique_id, int cid,
   auto &rank = task.ranks[task.sendrank];
   auto &recvch = task.ranks[task.recvrank].channels[cid];
   auto &ch = rank.channels[cid];
-  //  if (ch.sendtail <= recvch.recvtail) {
-  size = ch.sendsizes[ch.sendtail];
-  // } else {
-  //   size = -1;
-  // }
+  if (ch.sendtail <= recvch.recvtail) {
+    size = ch.sendsizes[ch.sendtail];
+  } else {
+    size = -1;
+  }
   return 0;
  }
 
