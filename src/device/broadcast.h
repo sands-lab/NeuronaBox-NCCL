@@ -28,8 +28,7 @@ namespace {
     T *outputBuf = (T*)args->recvbuff;
     Primitives<T, RedOp, FanSymmetric<1>, 0, Proto, 0>
       prims(tid, nthreads, &ring->prev, &ring->next, inputBuf, outputBuf, args->redOpArg);
-    // printf("[kernel] Broadcast @rank %d root %d size %ld\n", rank, root,
-    // size);
+    // printf("[kernel] Broadcast @rank %d root %d size %ld\n", rank, root, size);
     for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
       ssize_t realChunkSize;
       if (Proto::Id == NCCL_PROTO_SIMPLE) {

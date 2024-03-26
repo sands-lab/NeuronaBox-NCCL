@@ -160,10 +160,6 @@ static ncclResult_t doLaunches(struct ncclComm* head) {
           // Pop next unlaunched kernel
           struct ncclKernelPlan* plan = comm->unlaunchedPlansHead;
 
-          int bypass = 0;
-          NCCLCHECK(
-              modBypassCheck(&global_controller, plan->unique_id, bypass));
-
           if (plan != nullptr) {
             comm->unlaunchedPlansHead = plan->next;
             CUDACHECKGOTO(cudaSetDevice(comm->cudaDev), result, failure);
@@ -176,10 +172,6 @@ static ncclResult_t doLaunches(struct ncclComm* head) {
             NCCLCHECKGOTO(ncclLaunchKernelAfter_NoCuda(comm, plan), result, failure);
           }
 
-          // if (bypass) {
-          //   NCCLCHECK(ncclModSync());
-          //   LOG_MOD(NCCL_MOD, "nccl kernel launch success and synced");
-          // }
         } else { // Final round.
           CUDACHECKGOTO(cudaSetDevice(comm->cudaDev), result, failure);
           NCCLCHECKGOTO(ncclLaunchFinish(comm), result, failure);

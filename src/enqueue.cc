@@ -17,6 +17,7 @@
 #include "include/emulator.h"
 #include "include/nccl_common.h"
 #include "transport.h"
+#include <assert.h>
 #include <cinttypes> // PRIx64
 #include <cstring>   // std::memcpy
 
@@ -1068,6 +1069,7 @@ ncclResult_t ncclLaunchKernel(struct ncclComm *comm,
   int unique_id = plan->unique_id;
   int bypass = 0;
   NCCLCHECK(modBypassCheck(&global_controller, unique_id, bypass));
+  assert(bypass != -1);
   LOG_MOD(NCCL_MOD, "nccl lanunch kernel, unique_id = %d, bypass = %d",
           unique_id, bypass);
 
@@ -1116,6 +1118,7 @@ ncclResult_t ncclLaunchKernel(struct ncclComm *comm,
     if (bypass) {
       LOG_MOD(NCCL_MOD, "bypass kernel launch exc define");
     } else {
+      printf("[nccl] Kernel Launch\n");
       CUDACHECK(cudaLaunchKernelExC(&launchConfig, fn, args));
     }
     return ncclSuccess;
@@ -1467,12 +1470,13 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
 
   LOG_MOD(NCCL_MOD, "info->pattern %d, info->nstepsPerLoop %d, info->nchunksPerLoop %d, nloops=%d", info->pattern, info->nstepsPerLoop, info->nchunksPerLoop, nLoops);
   LOG_MOD(NCCL_MOD,
-          "proxyOp->nsteps=%d, proxyOp->sliceSteps=%d, proxyOp->chunkSteps=%d, "
+          "info->count=%d, proxyOp->nsteps=%d, proxyOp->sliceSteps=%d, "
+          "proxyOp->chunkSteps=%d, "
           "proxyOp->chunkSize=%d,proxyOp->protocol=%d,proxyOp->nbytes=%lu, "
           "proxyOp->unique_id=%lu",
-          proxyOp->nsteps, proxyOp->sliceSteps, proxyOp->chunkSteps,
-          proxyOp->chunkSize, proxyOp->protocol, proxyOp->nbytes,
-          proxyOp->unique_id);
+          info->count, proxyOp->nsteps, proxyOp->sliceSteps,
+          proxyOp->chunkSteps, proxyOp->chunkSize, proxyOp->protocol,
+          proxyOp->nbytes, proxyOp->unique_id);
   TRACE(NCCL_COLL,"opCount %lx slicesteps %d spl %d cpl %d nbytes %zi -> protocol %d nchannels %d nthreads %d, nloops %d nsteps %d chunksize %d comm %p",
       proxyOp->opCount, sliceSteps, info->nstepsPerLoop, info->nchunksPerLoop, info->nBytes, info->protocol, info->nChannels, info->nThreads,
       nLoops, proxyOp->nsteps, chunkSize, info->comm);
@@ -1680,7 +1684,7 @@ ncclResult_t ncclEnqueueCheck(struct ncclInfo* info) {
   //! emu
   NCCLCHECK(modAddTask(&global_controller, info));
   LOG_MOD(NCCL_MOD, "New info unique_id %lu", info->unique_id);
-  printf("[nccl] enqueued: %s @stream: %d id:%lu\n", info->opName,
+  printf("[nccl] Enqueued: %s @stream: %d id:%lu\n", info->opName,
          global_controller.stream2int[info->stream], info->unique_id);
 
   NCCLCHECKGOTO(PtrCheck(info->comm, info->opName, "comm"), ret, fail);
