@@ -207,7 +207,7 @@ rankInit(modRankInfo *rankinfo, modEmulatorTask *task, modCommInfo *comm,
 static inline __attribute__((always_inline)) int
 bypassCheckInternal(modTaskInfo info, uint64_t unique_id) {
   return MOD_KERNEL_BYPASS == 1 && info.coll == ncclFuncAllReduce &&
-         unique_id >= 8; //(39 * 2) + 8;
+         unique_id >= 16; //(39 * 2) + 8;
 }
 
 static inline __attribute__((always_inline)) int
@@ -278,7 +278,7 @@ check_done_task(modEmulatorTask *task) {
   }
   if (done) {
     task->done = 1;
-    printf("task unique_id = %lu done\n", task->info.unique_id);
+    // printf("[sync] task unique_id = %lu done\n", task->info.unique_id);
     LOG_MOD(NCCL_MOD, "check_done_task: done=%d, unique_id=%lu, rksize=%lu",
             done, task->info.unique_id, task->ranks.size());
   }
@@ -300,6 +300,7 @@ ncclResult_t ncclModStreamSyncFunc(modController *controller, cudaStream_t s) {
     LOG_MOD(NCCL_MOD, "ncclModStreamSyncFunc: bypass is off, return");
     return ncclSuccess;
   }
+  // emulator_lock.lock();
   if (controller->stream2ids.count(s) == 0) {
     LOG_MOD(NCCL_LOG_WARN, "ncclModStreamSyncFunc: stream not found");
     return ncclSuccess;
@@ -334,6 +335,7 @@ ncclResult_t ncclModStreamSyncFunc(modController *controller, cudaStream_t s) {
   while (1) {
     flag = 1;
     for (auto i : rest_ids) {
+      assert(controller->id2task.count(i) > 0);
       auto &task = controller->id2task[i];
       if (task.done || task.info.bypass == 0) {
         continue;
@@ -345,10 +347,13 @@ ncclResult_t ncclModStreamSyncFunc(modController *controller, cudaStream_t s) {
       // done");
       break;
     } else {
+      // emulator_lock.unlock();
       sched_yield();
+      // emulator_lock.lock();
     }
   }
   last = ids.size();
+  // emulator_lock.unlock();
   // controller->id2task.clear();
   return ncclSuccess;
 }
@@ -386,6 +391,7 @@ ncclResult_t modInitTask(modController *controller, ncclInfo *info) {
   assert(controller->id2task.count(unique_id) == 0);
   emulatorTaskInit(&task, controller->comm, info);
   controller->id2task[task.info.unique_id] = task;
+  printf("[emulator] task unique_id = %lu inited\n", task.info.unique_id);
   int nchannels = task.info.nchannels;
   for (int i = 0; i < nchannels; ++i) {
     if (controller->cid2bypassed.count(i) == 0) {
@@ -421,14 +427,14 @@ ncclResult_t modRemoveTask(modController *controller, uint64_t unique_id) {
 }
 
 ncclResult_t modBypassCheck(modController *controller, uint64_t unique_id,
-                            int &bypass) {
-  while (controller->id2task.count(unique_id) <= 0) {
+                            int &bypass, std::string msg) {
+  if (controller->id2task.count(unique_id) <= 0) {
     // LOG_MOD(NCCL_MOD, "modBypassCheck: task for unique_id: %lu not
     // recorded!",
     //         unique_id);
-    fprintf(stderr, "modBypassCheck: task for unique_id: %lu not recorded !\n",
-            unique_id);
-    usleep(10);
+    fprintf(stderr,
+            "ERRORtask for unique_id: %lu not found from %s, size = %u\n",
+            unique_id, msg.c_str(), controller->id2task.size());
   }
   assert(controller->id2task.count(unique_id) > 0);
   auto &task = controller->id2task[unique_id];
@@ -447,8 +453,8 @@ ncclResult_t modGlobalInit(modController *controller, ncclComm *comm) {
   controller->comm->mynode = MOD_MY_NODE;
   controller->comm->nnodes = MOD_N_NODES;
   controller->comm->nrankpernode = comm->nRanks / MOD_N_NODES;
-
   controller->id2task = map<uint64_t, modEmulatorTask>();
+  printf("[emulator] global init done");
 
   controller->stream2ids = map<cudaStream_t, vector<uint64_t>>();
 

@@ -6,6 +6,7 @@
 #include "proxy.h"
 #include <cstdint>
 #include <map>
+#include <mutex>
 #include <set>
 #include <sys/types.h>
 #include <vector>
@@ -23,7 +24,7 @@ extern int MOD_MY_NODE;
 extern modCoordinator global_coordinator;
 extern modTopology global_topology;
 extern modController global_controller;
-
+extern std::mutex emulator_lock;
 ncclResult_t modGetAllEnvVars();
 // end global
 
@@ -171,7 +172,7 @@ ncclResult_t modQueryTask(modController *controller, uint64_t unique_id,
 ncclResult_t modRemoveTask(modController *controller, uint64_t unique_id);
 
 ncclResult_t modBypassCheck(modController *controller, uint64_t unique_id,
-                            int &bypass);
+                            int &bypass, std::string msg);
 
 ncclResult_t modGlobalInit(modController *controller, ncclComm *comm);
 
