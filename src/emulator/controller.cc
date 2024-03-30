@@ -207,7 +207,7 @@ rankInit(modRankInfo *rankinfo, modEmulatorTask *task, modCommInfo *comm,
 static inline __attribute__((always_inline)) int
 bypassCheckInternal(modTaskInfo info, uint64_t unique_id) {
   return MOD_KERNEL_BYPASS == 1 && info.coll == ncclFuncAllReduce &&
-         unique_id >= 16; //(39 * 2) + 8;
+         unique_id >= 5; //(39 * 2) + 8;
 }
 
 static inline __attribute__((always_inline)) int

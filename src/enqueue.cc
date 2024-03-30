@@ -1068,9 +1068,9 @@ ncclResult_t ncclLaunchKernel(struct ncclComm *comm,
   //! emu
   int unique_id = plan->unique_id;
   int bypass = 0;
-  // emulator_lock.lock();
+  emulator_lock.lock();
   modBypassCheck(&global_controller, unique_id, bypass, "ncclLaunchKernel");
-  // emulator_lock.unlock();
+  emulator_lock.unlock();
   assert(bypass != -1);
   LOG_MOD(NCCL_MOD, "nccl lanunch kernel, unique_id = %d, bypass = %d",
           unique_id, bypass);
@@ -1489,9 +1489,9 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
   } else {
     LOG_MOD(NCCL_MOD, "Using Protocol Unknown!");
   }
-  // emulator_lock.lock();
+  emulator_lock.lock();
   modInitTask(&global_controller, info);
-  // emulator_lock.unlock();
+  emulator_lock.unlock();
   // modTopologyInit(&global_topology, proxyOp, info);
   return ncclSuccess;
 }
@@ -1685,12 +1685,12 @@ ncclResult_t ncclEnqueueCheck(struct ncclInfo* info) {
   ncclResult_t ret = ncclSuccess;
   int devOld = -1;
   //! emu
-  // emulator_lock.lock();
+  emulator_lock.lock();
   NCCLCHECK(modAddTask(&global_controller, info));
   LOG_MOD(NCCL_MOD, "New info unique_id %lu", info->unique_id);
   printf("[nccl] Enqueued: %s @stream: %d id:%lu\n", info->opName,
          global_controller.stream2int[info->stream], info->unique_id);
-  // emulator_lock.unlock();
+  emulator_lock.unlock();
 
   NCCLCHECKGOTO(PtrCheck(info->comm, info->opName, "comm"), ret, fail);
   // Check whether communicator is ready to communicate
