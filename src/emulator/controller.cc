@@ -249,8 +249,8 @@ emulatorTaskDestroy(modEmulatorTask *task) {
 static inline __attribute__((always_inline)) int
 check_done_ch(modChannelInfo *ch) {
   return ch->sendtail == ch->sendsizes.size() && ch->senddone;
-  return ch->sendtail == ch->sendsizes.size() &&
-         ch->recvtail == ch->recvsizes.size() && ch->senddone && ch->recvdone;
+  // return ch->sendtail == ch->sendsizes.size() &&
+  //        ch->recvtail == ch->recvsizes.size() && ch->senddone && ch->recvdone;
 }
 
 static inline __attribute__((always_inline)) int
@@ -476,11 +476,11 @@ modProxyGetSendSize(modController *controller, int unique_id, int cid,
   auto &rank = task.ranks[task.sendrank];
   auto &recvch = task.ranks[task.recvrank].channels[cid];
   auto &ch = rank.channels[cid];
-  if (ch.sendtail <= recvch.recvtail) {
-    size = ch.sendsizes[ch.sendtail];
-  } else {
-    size = -1;
-  }
+  // if (ch.sendtail <= recvch.recvtail) {
+  size = ch.sendsizes[ch.sendtail];
+  // } else {
+  //   size = -1;
+  // }
   return 0;
  }
 
