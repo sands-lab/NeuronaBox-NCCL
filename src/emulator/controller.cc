@@ -207,7 +207,7 @@ rankInit(modRankInfo *rankinfo, modEmulatorTask *task, modCommInfo *comm,
 static inline __attribute__((always_inline)) int
 bypassCheckInternal(modTaskInfo info, uint64_t unique_id) {
   return MOD_KERNEL_BYPASS == 1 && info.coll == ncclFuncAllReduce &&
-         unique_id >= 5; //(39 * 2) + 8;
+         unique_id >= 89; //(39 * 2) + 8;
 }
 
 static inline __attribute__((always_inline)) int
@@ -300,7 +300,7 @@ ncclResult_t ncclModStreamSyncFunc(modController *controller, cudaStream_t s) {
     LOG_MOD(NCCL_MOD, "ncclModStreamSyncFunc: bypass is off, return");
     return ncclSuccess;
   }
-  // emulator_lock.lock();
+  emulator_lock.lock();
   if (controller->stream2ids.count(s) == 0) {
     LOG_MOD(NCCL_LOG_WARN, "ncclModStreamSyncFunc: stream not found");
     return ncclSuccess;
@@ -347,13 +347,13 @@ ncclResult_t ncclModStreamSyncFunc(modController *controller, cudaStream_t s) {
       // done");
       break;
     } else {
-      // emulator_lock.unlock();
+      emulator_lock.unlock();
       sched_yield();
-      // emulator_lock.lock();
+      emulator_lock.lock();
     }
   }
   last = ids.size();
-  // emulator_lock.unlock();
+  emulator_lock.unlock();
   // controller->id2task.clear();
   return ncclSuccess;
 }
@@ -391,7 +391,7 @@ ncclResult_t modInitTask(modController *controller, ncclInfo *info) {
   assert(controller->id2task.count(unique_id) == 0);
   emulatorTaskInit(&task, controller->comm, info);
   controller->id2task[task.info.unique_id] = task;
-  printf("[emulator] task unique_id = %lu inited\n", task.info.unique_id);
+  // printf("[emulator] task unique_id = %lu inited\n", task.info.unique_id);
   int nchannels = task.info.nchannels;
   for (int i = 0; i < nchannels; ++i) {
     if (controller->cid2bypassed.count(i) == 0) {
@@ -513,7 +513,7 @@ modProxyRecv(modController *controller, int unique_id, int cid, int size) {
 
 __attribute__((always_inline)) int modProxySendDone(modController *controller,
                                                     int unique_id, int cid,
-                                                    int bypassed) {
+                                                    uint64_t bypassed) {
   assert(controller->id2task.count(unique_id) > 0);
   auto &task = controller->id2task[unique_id];
   auto &rank = task.ranks[task.sendrank];
@@ -522,14 +522,14 @@ __attribute__((always_inline)) int modProxySendDone(modController *controller,
   ch.senddone = 1;
   auto &c = controller->cid2bypassed[cid];
   c.first += bypassed;
-  LOG_MOD(NCCL_MOD, "modProxySendDone for unique_id: %d, cid: %d, inc = %d",
+  LOG_MOD(NCCL_MOD, "modProxySendDone for unique_id: %d, cid: %d, inc = %lu",
           unique_id, cid, bypassed);
   return 0;
 }
 
 __attribute__((always_inline)) int modProxyRecvDone(modController *controller,
                                                     int unique_id, int cid,
-                                                    int bypassed) {
+                                                    uint64_t bypassed) {
   assert(controller->id2task.count(unique_id) > 0);
   auto &task = controller->id2task[unique_id];
   auto &rank = task.ranks[task.recvrank];
@@ -538,14 +538,14 @@ __attribute__((always_inline)) int modProxyRecvDone(modController *controller,
   ch.recvdone = 1;
   auto &c = controller->cid2bypassed[cid];
   c.second += bypassed;
-  LOG_MOD(NCCL_MOD, "modProxyRecvDone for unique_id: %d, cid: %d, inc = %d",
+  LOG_MOD(NCCL_MOD, "modProxyRecvDone for unique_id: %d, cid: %d, inc = %lu",
           unique_id, cid, bypassed);
   return 0;
 }
 
 __attribute__((always_inline)) int
 modProxyBypassedSend(modController *controller, int unique_id, int cid,
-                     int &bypassed) {
+                     uint64_t &bypassed) {
   auto &c = controller->cid2bypassed[cid];
   bypassed = c.first;
   return 0;
@@ -553,7 +553,7 @@ modProxyBypassedSend(modController *controller, int unique_id, int cid,
 
 __attribute__((always_inline)) int
 modProxyBypassedRecv(modController *controller, int unique_id, int cid,
-                     int &bypassed) {
+                     uint64_t &bypassed) {
   auto &c = controller->cid2bypassed[cid];
   bypassed = c.second;
   return 0;

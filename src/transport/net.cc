@@ -1174,7 +1174,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
       }
       // Check whether we received data from the GPU and send it to the network
       if (sub->transmitted < sub->posted && sub->transmitted < sub->done + NCCL_STEPS) {
-        int bypassed = 0;
+        uint64_t bypassed = 0;
         emulator_lock.lock();
         modProxyBypassedSend(&global_controller, unique_id, sub->channelId,
                              bypassed);
@@ -1196,7 +1196,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
             ((done > (sub->base + sub->transmitted)) || p == NCCL_PROTO_LL);
         int size = 0;
         LOG_MOD(NCCL_MOD,
-                "[%d;%d]send sizesFifo[%d] = %d, bypassed = %d, recvTail + "
+                "[%d;%d]send sizesFifo[%d] = %d, bypassed = %lu, recvTail + "
                 "bypassed = %ld, "
                 "addr = %p, "
                 "base = %ld, "
@@ -1538,7 +1538,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
           volatile uint64_t* sendHead = &resources->sendMem->head;
           // uint64_t done = *sendHead;
           //! mod here
-          int bypassed = 0;
+          uint64_t bypassed = 0;
           emulator_lock.lock();
           modProxyBypassedRecv(&global_controller, unique_id, sub->channelId,
                                bypassed);

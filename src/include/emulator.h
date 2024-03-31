@@ -154,7 +154,8 @@ struct modController {
   std::map<uint64_t, modEmulatorTask> id2task;
   std::map<cudaStream_t, std::vector<uint64_t>> stream2ids;
   std::map<cudaStream_t, int> stream2int;
-  std::map<int, std::pair<int, int>> cid2bypassed; // cid: <send, recv>
+  std::map<int, std::pair<uint64_t, uint64_t>>
+      cid2bypassed; // cid: <send, recv>
   modCoordinator *coordinator;
   modTopology *topology;
   modCommInfo *comm;
@@ -186,15 +187,15 @@ int modProxySend(modController *controller, int unique_id, int cid, int size);
 int modProxyRecv(modController *controller, int unique_id, int cid, int size);
 
 int modProxySendDone(modController *controller, int unique_id, int cid,
-                     int bypassed);
+                     uint64_t bypassed);
 
 int modProxyRecvDone(modController *controller, int unique_id, int cid,
-                     int bypassed);
+                     uint64_t bypassed);
 
 int modProxyBypassedSend(modController *controller, int unique_id, int cid,
-                         int &bypassed);
+                         uint64_t &bypassed);
 
 int modProxyBypassedRecv(modController *controller, int unique_id, int cid,
-                         int &bypassed);
+                         uint64_t &bypassed);
 
 #endif // EMULATOR_H
