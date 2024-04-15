@@ -28,7 +28,7 @@ namespace {
     T *outputBuf = (T*)args->recvbuff;
     Primitives<T, RedOp, FanSymmetric<1>, 0, Proto, 0>
       prims(tid, nthreads, &ring->prev, &ring->next, inputBuf, outputBuf, args->redOpArg);
-
+    // printf("[kernel] Broadcast @rank %d root %d size %ld\n", rank, root, size);
     for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
       ssize_t realChunkSize;
       if (Proto::Id == NCCL_PROTO_SIMPLE) {
@@ -45,12 +45,22 @@ namespace {
       int nelem = min(realChunkSize, size-offset);
 
       if (rank == root) {
+        // if (tid == 0) {
+        //   printf("[nccl] Broadcast @root offset %d nelem %ld\n", root,
+        //   offset,
+        //          nelem);
+        // }
         if (inputBuf == outputBuf) {
           prims.send(offset, nelem);
         } else {
           prims.copySend(offset, offset, nelem);
         }
       } else if (nextRank == root) {
+        // if (tid == 0) {
+        //   printf("[nccl] Broadcast @next_to_root offset %d nelem %ld\n",
+        //   root,
+        //          offset, nelem);
+        // }
         prims.recv(offset, nelem);
       } else {
         prims.recvCopySend(offset, nelem);

@@ -36,7 +36,10 @@ extern char ncclLastError[];
 #define INFO(FLAGS, ...) ncclDebugLog(NCCL_LOG_INFO, (FLAGS), __func__, __LINE__, __VA_ARGS__)
 #define TRACE_CALL(...) ncclDebugLog(NCCL_LOG_TRACE, NCCL_CALL, __func__, __LINE__, __VA_ARGS__)
 #define LOG_MOD(FLAGS, ...)                                                    \
-  ncclDebugLog(NCCL_LOG_MOD, (FLAGS), __func__, __LINE__, __VA_ARGS__)
+  do {                                                                         \
+    if (1)                                                                     \
+      ncclDebugLog(NCCL_LOG_MOD, (FLAGS), __func__, __LINE__, __VA_ARGS__);    \
+  } while (0)
 
 #ifdef ENABLE_TRACE
 #define TRACE(FLAGS, ...) ncclDebugLog(NCCL_LOG_TRACE, (FLAGS), __func__, __LINE__, __VA_ARGS__)

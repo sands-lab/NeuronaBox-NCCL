@@ -3,6 +3,7 @@
 #include "emulator.h"
 #include <assert.h>
 #include <cinttypes>
+#include <cstdio>
 #include <map>
 #include <math.h>
 #include <stdlib.h>
@@ -14,10 +15,16 @@ int MOD_N_NODES = -1;
 int MOD_MY_NODE = -1;
 modCoordinator global_coordinator;
 modTopology global_topology;
+mutex emulator_lock;
 
 ncclResult_t modGetAllEnvVars() {
+  setbuf(stdout, NULL);
+  setbuf(stderr, NULL);
   LOG_MOD(NCCL_MOD, "modGetAllEnvVars");
-  char *env = getenv("MOD_N_MPI_RANKS");
+  char *env = getenv("OMPI_COMM_WORLD_SIZE");
+  if (env == NULL) {
+    env = getenv("MOD_N_MPI_RANKS");
+  }
   if (env == NULL) {
     LOG_MOD(NCCL_LOG_ABORT, "Error: N_MPI_RANKS not set");
     return ncclModError;
@@ -25,7 +32,10 @@ ncclResult_t modGetAllEnvVars() {
     MOD_N_NODES = atoi(env);
     LOG_MOD(NCCL_MOD, "MOD_N_MPI_RANKS=%d", MOD_N_NODES);
   }
-  env = getenv("MOD_MY_MPI_RANK");
+  env = getenv("OMPI_COMM_WORLD_RANK");
+  if (env == NULL) {
+    env = getenv("MOD_MY_MPI_RANK");
+  }
   if (env == NULL) {
     LOG_MOD(NCCL_LOG_ABORT, "Error: MY_MPI_RANK not set");
     return ncclModError;

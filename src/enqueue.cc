@@ -17,6 +17,7 @@
 #include "include/emulator.h"
 #include "include/nccl_common.h"
 #include "transport.h"
+#include <assert.h>
 #include <cinttypes> // PRIx64
 #include <cstring>   // std::memcpy
 
@@ -1067,7 +1068,10 @@ ncclResult_t ncclLaunchKernel(struct ncclComm *comm,
   //! emu
   int unique_id = plan->unique_id;
   int bypass = 0;
-  NCCLCHECK(modBypassCheck(&global_controller, unique_id, bypass));
+  emulator_lock.lock();
+  modBypassCheck(&global_controller, unique_id, bypass, "ncclLaunchKernel");
+  emulator_lock.unlock();
+  assert(bypass != -1);
   LOG_MOD(NCCL_MOD, "nccl lanunch kernel, unique_id = %d, bypass = %d",
           unique_id, bypass);
 
@@ -1116,6 +1120,7 @@ ncclResult_t ncclLaunchKernel(struct ncclComm *comm,
     if (bypass) {
       LOG_MOD(NCCL_MOD, "bypass kernel launch exc define");
     } else {
+      // printf("[nccl] Kernel Launch\n");
       CUDACHECK(cudaLaunchKernelExC(&launchConfig, fn, args));
     }
     return ncclSuccess;
@@ -1467,12 +1472,13 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
 
   LOG_MOD(NCCL_MOD, "info->pattern %d, info->nstepsPerLoop %d, info->nchunksPerLoop %d, nloops=%d", info->pattern, info->nstepsPerLoop, info->nchunksPerLoop, nLoops);
   LOG_MOD(NCCL_MOD,
-          "proxyOp->nsteps=%d, proxyOp->sliceSteps=%d, proxyOp->chunkSteps=%d, "
+          "info->count=%lu, proxyOp->nsteps=%d, proxyOp->sliceSteps=%d, "
+          "proxyOp->chunkSteps=%d, "
           "proxyOp->chunkSize=%d,proxyOp->protocol=%d,proxyOp->nbytes=%lu, "
           "proxyOp->unique_id=%lu",
-          proxyOp->nsteps, proxyOp->sliceSteps, proxyOp->chunkSteps,
-          proxyOp->chunkSize, proxyOp->protocol, proxyOp->nbytes,
-          proxyOp->unique_id);
+          info->count, proxyOp->nsteps, proxyOp->sliceSteps,
+          proxyOp->chunkSteps, proxyOp->chunkSize, proxyOp->protocol,
+          proxyOp->nbytes, proxyOp->unique_id);
   TRACE(NCCL_COLL,"opCount %lx slicesteps %d spl %d cpl %d nbytes %zi -> protocol %d nchannels %d nthreads %d, nloops %d nsteps %d chunksize %d comm %p",
       proxyOp->opCount, sliceSteps, info->nstepsPerLoop, info->nchunksPerLoop, info->nBytes, info->protocol, info->nChannels, info->nThreads,
       nLoops, proxyOp->nsteps, chunkSize, info->comm);
@@ -1483,8 +1489,9 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
   } else {
     LOG_MOD(NCCL_MOD, "Using Protocol Unknown!");
   }
-
+  emulator_lock.lock();
   modInitTask(&global_controller, info);
+  emulator_lock.unlock();
   // modTopologyInit(&global_topology, proxyOp, info);
   return ncclSuccess;
 }
@@ -1669,6 +1676,7 @@ static ncclResult_t taskAppend(struct ncclComm* comm, struct ncclInfo const* inf
       l = l->next;
     }
   }
+  LOG_MOD(NCCL_MOD, "End of taskAppend");
   return ncclSuccess;
 }
 
@@ -1676,10 +1684,13 @@ ncclResult_t ncclEnqueueCheck(struct ncclInfo* info) {
   NCCLCHECK(ncclGroupStartInternal());
   ncclResult_t ret = ncclSuccess;
   int devOld = -1;
-  printf("NCCL Enqueued: %s\n", info->opName);
   //! emu
+  emulator_lock.lock();
   NCCLCHECK(modAddTask(&global_controller, info));
   LOG_MOD(NCCL_MOD, "New info unique_id %lu", info->unique_id);
+  // printf("[nccl] Enqueued: %s @stream: %d id:%lu\n", info->opName,
+  //        global_controller.stream2int[info->stream], info->unique_id);
+  emulator_lock.unlock();
 
   NCCLCHECKGOTO(PtrCheck(info->comm, info->opName, "comm"), ret, fail);
   // Check whether communicator is ready to communicate

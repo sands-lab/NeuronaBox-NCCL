@@ -1126,7 +1126,9 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
   if (args->state == ncclProxyOpProgress) {
     int unique_id = args->unique_id;
     int bypass = 0;
-    modBypassCheck(&global_controller, unique_id, bypass);
+    emulator_lock.lock();
+    modBypassCheck(&global_controller, unique_id, bypass, "Send");
+    emulator_lock.unlock();
     LOG_MOD(NCCL_MOD, "send proxy progress unique_id = %d, bypass = %d",
             unique_id, bypass);
     int p = args->protocol;
@@ -1172,7 +1174,12 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
       }
       // Check whether we received data from the GPU and send it to the network
       if (sub->transmitted < sub->posted && sub->transmitted < sub->done + NCCL_STEPS) {
-        int buffSlot = (sub->base+sub->transmitted)%NCCL_STEPS;
+        uint64_t bypassed = 0;
+        emulator_lock.lock();
+        modProxyBypassedSend(&global_controller, unique_id, sub->channelId,
+                             bypassed);
+        emulator_lock.unlock();
+        int buffSlot = (sub->base + sub->transmitted) % NCCL_STEPS;
         volatile int* sizesFifo = resources->recvMem->sizesFifo;
         volatile uint64_t* recvTail = &resources->recvMem->tail;
         //! mod here, recvMem is accessble on GPU side, kernel will modify that
@@ -1183,24 +1190,24 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
         //! part has finished its work
         //! if (sizesFifo[buffSlot] != -1 &&
         //! ((*recvTail > (sub->base+sub->transmitted)) || p == NCCL_PROTO_LL))
-        int bypassed = 0;
-        NCCLCHECK(modProxyBypassedSend(&global_controller, unique_id,
-                                       sub->channelId, bypassed));
-        uint64_t done = *recvTail + bypassed;
+        uint64_t done = *recvTail; //+ bypassed;
         bool cond =
             sizesFifo[buffSlot] != -1 &&
             ((done > (sub->base + sub->transmitted)) || p == NCCL_PROTO_LL);
         int size = 0;
         LOG_MOD(NCCL_MOD,
-                "[%d;%d]send sizesFifo[%d] = %d, recvTail + bypassed = %ld, "
+                "[%d;%d]send sizesFifo[%d] = %d, bypassed = %lu, recvTail + "
+                "bypassed = %ld, "
                 "addr = %p, "
-                "base = %d, "
-                "transmitted = %d, bypass = %d, cond = %d",
-                unique_id, bypass, buffSlot, sizesFifo[buffSlot], done,
-                recvTail, sub->base, sub->transmitted, bypass, cond);
+                "base = %ld, "
+                "transmitted = %ld, cond = %d",
+                unique_id, bypass, buffSlot, sizesFifo[buffSlot], bypassed,
+                done, recvTail, sub->base, sub->transmitted, cond);
         if (bypass) {
+          emulator_lock.lock();
           modProxyGetSendSize(&global_controller, unique_id, sub->channelId,
                               size);
+          emulator_lock.unlock();
         }
         if ((bypass && size != -1) || (!bypass && cond)) {
           // We have something to receive, let's check if it's completely ready.
@@ -1242,8 +1249,10 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
                       "[%d;%d]sub%d:chan%d in send proxy progress, size is %d",
                       unique_id, bypass, s, sub->channelId, size);
               if (bypass) {
+                emulator_lock.lock();
                 modProxySend(&global_controller, unique_id, sub->channelId,
                              size);
+                emulator_lock.unlock();
               }
               TRACE(NCCL_NET, "sendProxy [%ld/%d] Isend posted, req %p", sub->transmitted, buffSlot, sub->requests[buffSlot]);
               if (!bypass) {
@@ -1280,8 +1289,10 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState *proxyState,
             args->done++;
             if (bypass) {
               // resources->recvMem->tail += sub->nsteps;
+              emulator_lock.lock();
               modProxySendDone(&global_controller, unique_id, sub->channelId,
                                sub->nsteps);
+              emulator_lock.unlock();
             }
             LOG_MOD(NCCL_MOD,
                     "[%d;%d]send done, args->done = %d for sub %d, "
@@ -1311,7 +1322,7 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
     int maxRecvs = 1;
     for (int s=0; s<args->nsubs; s++) {
       struct ncclProxySubArgs* sub = args->subs+s;
-      LOG_MOD(NCCL_MOD, "sub%d, nbytes%lu, nsteps%lu, channelid%d\n", s,
+      LOG_MOD(NCCL_MOD, "sub%d, nbytes%lu, nsteps%d, channelid%d\n", s,
               sub->nbytes, sub->nsteps, sub->channelId);
       if (groupSize == maxRecvs) {
         groupSize = 0;
@@ -1348,7 +1359,9 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
     //! emu
     int unique_id = args->unique_id;
     int bypass = 0;
-    modBypassCheck(&global_controller, unique_id, bypass);
+    emulator_lock.lock();
+    modBypassCheck(&global_controller, unique_id, bypass, "Send");
+    emulator_lock.unlock();
     LOG_MOD(NCCL_MOD, "recv proxy progress unique_id = %d, bypass = %d",
             unique_id, bypass);
     int p = args->protocol;
@@ -1436,8 +1449,10 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
             LOG_MOD(NCCL_MOD, "[%d;%d]sub%d:chan%d, size is %d", unique_id,
                     bypass, s + i, sub->channelId, sizes[i]);
             if (bypass) {
+              emulator_lock.lock();
               modProxyRecv(&global_controller, unique_id, sub->channelId,
                            sizes[i]);
+              emulator_lock.unlock();
             }
             sub->received += args->sliceSteps;
             for (uint64_t step=sub->received-args->sliceSteps; step<sub->received; step++) ncclProfilingRecord(args, s+i, step, ncclProxyProfileRecvFlushWait);
@@ -1523,10 +1538,12 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
           volatile uint64_t* sendHead = &resources->sendMem->head;
           // uint64_t done = *sendHead;
           //! mod here
-          int bypassed = 0;
-          NCCLCHECK(modProxyBypassedRecv(&global_controller, unique_id,
-                                         sub->channelId, bypassed));
-          uint64_t done = *sendHead + bypassed;
+          uint64_t bypassed = 0;
+          emulator_lock.lock();
+          modProxyBypassedRecv(&global_controller, unique_id, sub->channelId,
+                               bypassed);
+          emulator_lock.unlock();
+          uint64_t done = *sendHead; //+ bypassed;
           bool left_cond = bypass || (done > sub->base + sub->done);
           LOG_MOD(NCCL_MOD,
                   "[%d;%d]recv proxy progress, *sendhead + bypass = %lu, addr "
@@ -1556,12 +1573,14 @@ static ncclResult_t recvProxyProgress(struct ncclProxyState* proxyState, struct 
               if (bypass) {
                 LOG_MOD(NCCL_MOD,
                         "[%d;%d]recv done bypass update, *sendhead = %lu += "
-                        "step = %lu",
+                        "step = %d",
                         unique_id, bypass, resources->sendMem->head,
                         sub->nsteps);
                 // resources->sendMem->head += sub->nsteps;
+                emulator_lock.lock();
                 modProxyRecvDone(&global_controller, unique_id, sub->channelId,
                                  sub->nsteps);
+                emulator_lock.unlock();
               }
               args->done++;
               LOG_MOD(NCCL_MOD,

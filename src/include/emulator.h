@@ -6,6 +6,7 @@
 #include "proxy.h"
 #include <cstdint>
 #include <map>
+#include <mutex>
 #include <set>
 #include <sys/types.h>
 #include <vector>
@@ -23,7 +24,7 @@ extern int MOD_MY_NODE;
 extern modCoordinator global_coordinator;
 extern modTopology global_topology;
 extern modController global_controller;
-
+extern std::mutex emulator_lock;
 ncclResult_t modGetAllEnvVars();
 // end global
 
@@ -70,6 +71,7 @@ struct modTaskInfo {
   int nchannels;
   int nthreads;
   uint64_t unique_id;
+  int bypass;
 };
 
 struct modEmulatorTask {
@@ -151,7 +153,9 @@ ncclResult_t modTopologyDestroy(modTopology *topology);
 struct modController {
   std::map<uint64_t, modEmulatorTask> id2task;
   std::map<cudaStream_t, std::vector<uint64_t>> stream2ids;
-  std::map<int, std::pair<int, int>> cid2bypassed; // cid: <send, recv>
+  std::map<cudaStream_t, int> stream2int;
+  std::map<int, std::pair<uint64_t, uint64_t>>
+      cid2bypassed; // cid: <send, recv>
   modCoordinator *coordinator;
   modTopology *topology;
   modCommInfo *comm;
@@ -169,31 +173,29 @@ ncclResult_t modQueryTask(modController *controller, uint64_t unique_id,
 ncclResult_t modRemoveTask(modController *controller, uint64_t unique_id);
 
 ncclResult_t modBypassCheck(modController *controller, uint64_t unique_id,
-                            int &bypass);
+                            int &bypass, std::string msg);
 
 ncclResult_t modGlobalInit(modController *controller, ncclComm *comm);
 
 // begin proxy
 
-ncclResult_t modProxyGetSendSize(modController *controller, int unique_id,
-                                 int cid, int &size);
+int modProxyGetSendSize(modController *controller, int unique_id, int cid,
+                        int &size);
 
-ncclResult_t modProxySend(modController *controller, int unique_id, int cid,
-                          int size);
+int modProxySend(modController *controller, int unique_id, int cid, int size);
 
-ncclResult_t modProxyRecv(modController *controller, int unique_id, int cid,
-                          int size);
+int modProxyRecv(modController *controller, int unique_id, int cid, int size);
 
-ncclResult_t modProxySendDone(modController *controller, int unique_id, int cid,
-                              int bypassed);
+int modProxySendDone(modController *controller, int unique_id, int cid,
+                     uint64_t bypassed);
 
-ncclResult_t modProxyRecvDone(modController *controller, int unique_id, int cid,
-                              int bypassed);
+int modProxyRecvDone(modController *controller, int unique_id, int cid,
+                     uint64_t bypassed);
 
-ncclResult_t modProxyBypassedSend(modController *controller, int unique_id,
-                                  int cid, int &bypassed);
+int modProxyBypassedSend(modController *controller, int unique_id, int cid,
+                         uint64_t &bypassed);
 
-ncclResult_t modProxyBypassedRecv(modController *controller, int unique_id,
-                                  int cid, int &bypassed);
+int modProxyBypassedRecv(modController *controller, int unique_id, int cid,
+                         uint64_t &bypassed);
 
 #endif // EMULATOR_H

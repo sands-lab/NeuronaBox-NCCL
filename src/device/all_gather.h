@@ -47,9 +47,9 @@ namespace {
       ssize_t offset;
       int nelem = min(realChunkSize, size-chunkOffset);
       int rankDest;
-      if (tid == 0) {
-        printf("AllGather: step-1\n");
-      }
+      // if (tid == 0) {
+      //   printf("AllGather: step-1\n");
+      // }
       // step 0: push data to next GPU
       rankDest = ringRanks[0];
       offset = chunkOffset + rankDest * size;
@@ -59,20 +59,21 @@ namespace {
       } else {
         prims.directCopySend(chunkOffset, offset, nelem);
       }
-      if (tid == 0) {
-        printf("AllGather: step 0, rankDest: %d, offset: %lu, nelem: %d\n",
-               rankDest, offset, nelem);
-      }
+      // if (tid == 0) {
+      //   printf("AllGather: step 0, rankDest: %d, offset: %lu, nelem: %d\n",
+      //          rankDest, offset, nelem);
+      // }
       // k-2 steps: copy to next GPU
       for (int j=1; j<nranks-1; ++j) {
         rankDest = ringRanks[nranks-j];
         offset = chunkOffset + rankDest * size;
 
         prims.directRecvCopySend(offset, nelem);
-        if (tid == 0) {
-          printf("AllGather: step %d, rankDest: %d, offset: %lu, nelem: %d\n",
-                 j, rankDest, offset, nelem);
-        }
+        // if (tid == 0) {
+        //   printf("AllGather: step %d, rankDest: %d, offset: %lu, nelem:
+        //   %d\n",
+        //          j, rankDest, offset, nelem);
+        // }
       }
 
       // Make final copy from buffer to dest.
@@ -80,10 +81,10 @@ namespace {
       offset = chunkOffset + rankDest * size;
       // Final wait/copy.
       prims.directRecv(offset, nelem);
-      if (tid == 0) {
-        printf("AllGather: step %d, rankDest: %d, offset: %lu, nelem: %d\n",
-               nranks - 1, rankDest, offset, nelem);
-      }
+      // if (tid == 0) {
+      //   printf("AllGather: step %d, rankDest: %d, offset: %lu, nelem: %d\n",
+      //          nranks - 1, rankDest, offset, nelem);
+      // }
     }
   }
 }
