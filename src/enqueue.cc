@@ -1120,7 +1120,7 @@ ncclResult_t ncclLaunchKernel(struct ncclComm *comm,
     if (bypass) {
       LOG_MOD(NCCL_MOD, "bypass kernel launch exc define");
     } else {
-      printf("[nccl] Kernel Launch\n");
+      // printf("[nccl] Kernel Launch\n");
       CUDACHECK(cudaLaunchKernelExC(&launchConfig, fn, args));
     }
     return ncclSuccess;
@@ -1472,7 +1472,7 @@ static ncclResult_t computeColl(struct ncclInfo* info /* input */, int* workFunc
 
   LOG_MOD(NCCL_MOD, "info->pattern %d, info->nstepsPerLoop %d, info->nchunksPerLoop %d, nloops=%d", info->pattern, info->nstepsPerLoop, info->nchunksPerLoop, nLoops);
   LOG_MOD(NCCL_MOD,
-          "info->count=%d, proxyOp->nsteps=%d, proxyOp->sliceSteps=%d, "
+          "info->count=%lu, proxyOp->nsteps=%d, proxyOp->sliceSteps=%d, "
           "proxyOp->chunkSteps=%d, "
           "proxyOp->chunkSize=%d,proxyOp->protocol=%d,proxyOp->nbytes=%lu, "
           "proxyOp->unique_id=%lu",

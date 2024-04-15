@@ -429,11 +429,8 @@ ncclResult_t modRemoveTask(modController *controller, uint64_t unique_id) {
 ncclResult_t modBypassCheck(modController *controller, uint64_t unique_id,
                             int &bypass, std::string msg) {
   if (controller->id2task.count(unique_id) <= 0) {
-    // LOG_MOD(NCCL_MOD, "modBypassCheck: task for unique_id: %lu not
-    // recorded!",
-    //         unique_id);
     fprintf(stderr,
-            "ERRORtask for unique_id: %lu not found from %s, size = %u\n",
+            "ERROR: task for unique_id: %lu not found from %s, size = %lu\n",
             unique_id, msg.c_str(), controller->id2task.size());
   }
   assert(controller->id2task.count(unique_id) > 0);
@@ -474,7 +471,7 @@ modProxyGetSendSize(modController *controller, int unique_id, int cid,
   assert(controller->id2task.count(unique_id) > 0);
   auto &task = controller->id2task[unique_id];
   auto &rank = task.ranks[task.sendrank];
-  auto &recvch = task.ranks[task.recvrank].channels[cid];
+  [[maybe_unused]] auto &recvch = task.ranks[task.recvrank].channels[cid];
   auto &ch = rank.channels[cid];
   // if (ch.sendtail <= recvch.recvtail) {
   size = ch.sendsizes[ch.sendtail];
