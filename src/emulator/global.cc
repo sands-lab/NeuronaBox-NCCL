@@ -13,6 +13,8 @@ using namespace std;
 int MOD_KERNEL_BYPASS = -1;
 int MOD_N_NODES = -1;
 int MOD_MY_NODE = -1;
+int MOD_DELAY = 0;
+int MOD_NON_BYPASS_NUM = 0;
 modCoordinator global_coordinator;
 modTopology global_topology;
 mutex emulator_lock;
@@ -51,5 +53,24 @@ ncclResult_t modGetAllEnvVars() {
     MOD_KERNEL_BYPASS = atoi(env);
     LOG_MOD(NCCL_MOD, "MOD_KERNEL_BYPASS=%d", MOD_KERNEL_BYPASS);
   }
+
+  env = getenv("MOD_DELAY");
+  if (env == NULL) {
+    LOG_MOD(NCCL_MOD, "MOD_DELAY not set, default to 0");
+    MOD_DELAY = 0;
+  } else {
+    MOD_DELAY = atoi(env);
+    LOG_MOD(NCCL_MOD, "MOD_DELAY=%d", MOD_DELAY);
+  }
+
+  env = getenv("MOD_NON_BYPASS_NUM");
+  if (env == NULL) {
+    LOG_MOD(NCCL_MOD, "MOD_NON_BYPASS_NUM not set, default to 0");
+    MOD_NON_BYPASS_NUM = 0;
+  } else {
+    MOD_NON_BYPASS_NUM = atoi(env);
+    LOG_MOD(NCCL_MOD, "MOD_NON_BYPASS_NUM=%d", MOD_NON_BYPASS_NUM);
+  }
+
   return ncclSuccess;
 }

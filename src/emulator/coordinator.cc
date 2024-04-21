@@ -3,6 +3,7 @@
 #include "driver_types.h"
 #include "emulator.h"
 #include <assert.h>
+#include <chrono>
 #include <cinttypes>
 #include <map>
 #include <math.h>
@@ -329,8 +330,8 @@ ncclResult_t modCoordinatorGetSendSize(modCoordinator *coordinator, int cid,
     size = -1;
     LOG_MOD(NCCL_MOD, "sendtail=%d > recvtail=%d", ch.sendtail, ch.recvtail);
   }
-    LOG_MOD(NCCL_MOD, "modCoordinatorGetSendSize: size=%d", size);
-    return ncclSuccess;
+  LOG_MOD(NCCL_MOD, "modCoordinatorGetSendSize: size=%d", size);
+  return ncclSuccess;
 }
 
 ncclResult_t modCoordinatorSend(modCoordinator *coordinator, int cid,

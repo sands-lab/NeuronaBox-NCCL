@@ -1120,7 +1120,7 @@ ncclResult_t ncclLaunchKernel(struct ncclComm *comm,
     if (bypass) {
       LOG_MOD(NCCL_MOD, "bypass kernel launch exc define");
     } else {
-      // printf("[nccl] Kernel Launch\n");
+      printf("[nccl] Kernel Launch\n");
       CUDACHECK(cudaLaunchKernelExC(&launchConfig, fn, args));
     }
     return ncclSuccess;

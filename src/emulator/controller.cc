@@ -16,6 +16,28 @@ using namespace std;
 
 modController global_controller;
 
+static void busy_wait(int ms) {
+  if (ms == 0) {
+    return;
+  }
+  // Get the start time
+  auto startTime = std::chrono::steady_clock::now();
+  // Loop until the elapsed time is less than the specified wait time
+  while (true) {
+    // Get the current time
+    auto currentTime = std::chrono::steady_clock::now();
+
+    // Calculate the elapsed time in milliseconds
+    auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           currentTime - startTime)
+                           .count();
+    // Check if the elapsed time has reached the specified wait time
+    if (elapsedTime >= ms) {
+      break;
+    }
+  }
+}
+
 static void calc_size_inkernel(int nelem, vector<int> &res) {
   LOG_MOD(NCCL_MOD, "calc_size_inkernel: nelem=%d", nelem);
   int stepSize = 131072; // DEFAULT_BUFFSIZE(simple) / NCCL_STEP / sizeof(float)
@@ -207,7 +229,7 @@ rankInit(modRankInfo *rankinfo, modEmulatorTask *task, modCommInfo *comm,
 static inline __attribute__((always_inline)) int
 bypassCheckInternal(modTaskInfo info, uint64_t unique_id) {
   return MOD_KERNEL_BYPASS == 1 && info.coll == ncclFuncAllReduce &&
-         unique_id >= 89; //(39 * 2) + 8;
+         unique_id >= MOD_NON_BYPASS_NUM;
 }
 
 static inline __attribute__((always_inline)) int
@@ -451,7 +473,7 @@ ncclResult_t modGlobalInit(modController *controller, ncclComm *comm) {
   controller->comm->nnodes = MOD_N_NODES;
   controller->comm->nrankpernode = comm->nRanks / MOD_N_NODES;
   controller->id2task = map<uint64_t, modEmulatorTask>();
-  printf("[emulator] global init done");
+  printf("[emulator] Rank %d global init done\n", comm->rank);
 
   controller->stream2ids = map<cudaStream_t, vector<uint64_t>>();
 
@@ -490,6 +512,9 @@ modProxySend(modController *controller, int unique_id, int cid, int size) {
    auto &rank = task.ranks[task.sendrank];
    auto &ch = rank.channels[cid];
    assert(ch.sendsizes[ch.sendtail] == size);
+   if (ch.sendtail == 0) {
+     busy_wait(MOD_DELAY);
+   }
    ch.sendtail++;
 
    return 0;
