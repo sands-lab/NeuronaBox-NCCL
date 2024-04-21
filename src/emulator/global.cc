@@ -13,7 +13,7 @@ using namespace std;
 int MOD_KERNEL_BYPASS = -1;
 int MOD_N_NODES = -1;
 int MOD_MY_NODE = -1;
-int MOD_DELAY = 0;
+float MOD_DELAY = 0;
 int MOD_NON_BYPASS_NUM = 0;
 modCoordinator global_coordinator;
 modTopology global_topology;
@@ -60,7 +60,7 @@ ncclResult_t modGetAllEnvVars() {
     MOD_DELAY = 0;
   } else {
     MOD_DELAY = atoi(env);
-    LOG_MOD(NCCL_MOD, "MOD_DELAY=%d", MOD_DELAY);
+    LOG_MOD(NCCL_MOD, "MOD_DELAY=%f", MOD_DELAY);
   }
 
   env = getenv("MOD_NON_BYPASS_NUM");
@@ -68,7 +68,7 @@ ncclResult_t modGetAllEnvVars() {
     LOG_MOD(NCCL_MOD, "MOD_NON_BYPASS_NUM not set, default to 0");
     MOD_NON_BYPASS_NUM = 0;
   } else {
-    MOD_NON_BYPASS_NUM = atoi(env);
+    MOD_NON_BYPASS_NUM = atof(env);
     LOG_MOD(NCCL_MOD, "MOD_NON_BYPASS_NUM=%d", MOD_NON_BYPASS_NUM);
   }
 

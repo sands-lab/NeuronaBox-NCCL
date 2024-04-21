@@ -21,7 +21,7 @@ struct modController;
 extern int MOD_KERNEL_BYPASS;
 extern int MOD_N_NODES;
 extern int MOD_MY_NODE;
-extern int MOD_DELAY;
+extern float MOD_DELAY;
 extern int MOD_NON_BYPASS_NUM;
 extern modCoordinator global_coordinator;
 extern modTopology global_topology;

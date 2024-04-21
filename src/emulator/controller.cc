@@ -16,28 +16,28 @@ using namespace std;
 
 modController global_controller;
 
-static void busy_wait(int ms) {
-  if (ms == 0) {
-    return;
-  }
+static void busy_wait(float waitTimeMilliseconds) {
   // Get the start time
   auto startTime = std::chrono::steady_clock::now();
+
+  // Convert float milliseconds to an appropriate duration object
+  auto waitDuration =
+      std::chrono::duration<float, std::milli>(waitTimeMilliseconds);
+
   // Loop until the elapsed time is less than the specified wait time
   while (true) {
     // Get the current time
     auto currentTime = std::chrono::steady_clock::now();
 
-    // Calculate the elapsed time in milliseconds
-    auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           currentTime - startTime)
-                           .count();
+    // Calculate the elapsed time
+    auto elapsedTime = currentTime - startTime;
+
     // Check if the elapsed time has reached the specified wait time
-    if (elapsedTime >= ms) {
+    if (elapsedTime >= waitDuration) {
       break;
     }
   }
 }
-
 static void calc_size_inkernel(int nelem, vector<int> &res) {
   LOG_MOD(NCCL_MOD, "calc_size_inkernel: nelem=%d", nelem);
   int stepSize = 131072; // DEFAULT_BUFFSIZE(simple) / NCCL_STEP / sizeof(float)
