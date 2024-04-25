@@ -62,7 +62,7 @@ struct modCommInfo {
 
 // Task Info
 struct modTaskInfo {
-  int count;     // number of elements
+  ssize_t count;     // number of elements
   int tsize;     // size of each element
   int coll;      // i.e. allreduce
   int reduceOp;  // i.e. sum
