@@ -29,6 +29,31 @@ namespace {
     Primitives<T, RedOp, FanSymmetric<1>, 1, Proto, 0> prims
       (tid, nthreads, &ring->prev, &ring->next, inputBuf, outputBuf, args->redOpArg);
 
+    int ringIx = ring->index;
+    if(tid==0){
+
+     printf("[tid=0] inside all gather run_ring! nthread=%d, proto:id=%d "
+            "chunkSize=%lu, minChunkSize:missing sizeof(T)=%lu, loopsize=%lu, "
+            "bid=%d, count=%lu, ringix=%d\n",
+            nthreads, Proto::Id, chunkSize,sizeof(T), loopSize,
+            bid, size, ringIx);
+    printf("sizeof(T): %lu\n",sizeof(T));
+
+
+
+
+
+        printf("rankDest0: %d ; nRanks: %d ; bid: %d ; minChunkSizeLL128: %d; sizeof(T): %lu ; Proto::calcBytePerStep(): %lu ; Proto::calcBytePerGrain(): %lu ;nthreads: %d; T *inputBuf: %lld ; T *outputBuf: %lld ; \n",ringRanks[0],nranks,bid,minChunkSizeLL128,sizeof(T),Proto::calcBytePerStep(),Proto::calcBytePerGrain(),nthreads,(uint64_t)inputBuf,(uint64_t)outputBuf);
+	      printf("rankDest for all_gather: ringRanks0: %d ; ringRanks1: %d\n",ringRanks[0],ringRanks[1]);  
+        printf("diff from ringRanks0 and ringIx: equal?: %d ,ringIx: %d\n",(ringIx==ringRanks[0])?1:0,ringIx);
+        printf("nChennals: %d ; chunkSize: %lu ; loopSize: %lu ; size: %lu ;WARP_SIZE: %d ;ALLGATHER_CHUNKSTEPS: %d ; \n",
+        nChannels,chunkSize,loopSize,size,(int)(2*WARP_SIZE)/2,(int)(2*ALLGATHER_CHUNKSTEPS)/2);    
+    }
+
+
+
+
+
     for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
       ssize_t realChunkSize;
       if (Proto::Id == NCCL_PROTO_SIMPLE) {

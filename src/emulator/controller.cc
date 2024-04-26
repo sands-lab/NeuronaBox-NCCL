@@ -52,9 +52,9 @@ static void calc_size_channel(int nranks, int ringindex, int count,
   
   int ringIx = ringindex;//直接用了我不管了
   int _ringRanks[2];_ringRanks[0]=ringIx;_ringRanks[1]=ringIx^1;
-  //LOG_MOD(NCCL_MOD, "ringindex= %d, count=%d,nchannels=%d, int mychannel=%d, int nthreads=%d,tsize=%d\n", ringindex,count,nchannels,mychannel,nthreads,tsize);
+  LOG_MOD(NCCL_MOD, "ringindex= %d, count=%d,nchannels=%d, int mychannel=%d, int nthreads=%d,tsize=%d\n", ringindex,count,nchannels,mychannel,nthreads,tsize);
 
-  //LOG_MOD(NCCL_MOD, "nChennals: %d ; chunkSize: %d ; loopSize: %d ; size: %lu ; bid: %d\n",nchannels,chunkSize,loopSize,size,bid);
+  LOG_MOD(NCCL_MOD, "nChennals: %d ; chunkSize: %d ; loopSize: %d ; size: %lu ; bid: %d\n",nchannels,chunkSize,loopSize,size,bid);
 
   for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
     ssize_t realChunkSize;
@@ -489,6 +489,7 @@ modProxySend(modController *controller, int unique_id, int cid, int size) {
    auto &task = controller->id2task[unique_id];
    auto &rank = task.ranks[task.sendrank];
    auto &ch = rank.channels[cid];
+   LOG_MOD(NCCL_MOD, "modProxySend for ch.recvsizes[%d]: %d\n",ch.sendtail,ch.sendsizes[ch.sendtail]);
    assert(ch.sendsizes[ch.sendtail] == size);
    ch.sendtail++;
 
@@ -503,6 +504,7 @@ modProxyRecv(modController *controller, int unique_id, int cid, int size) {
   auto &task = controller->id2task[unique_id];
   auto &rank = task.ranks[task.recvrank];
   auto &ch = rank.channels[cid];
+  LOG_MOD(NCCL_MOD, "modProxyRecv for ch.recvsizes[%d]: %d\n",ch.recvtail,ch.recvsizes[ch.recvtail]);
   assert(ch.recvsizes[ch.recvtail] == size);
   ch.recvtail++;
   return 0;
@@ -515,6 +517,7 @@ __attribute__((always_inline)) int modProxySendDone(modController *controller,
   auto &task = controller->id2task[unique_id];
   auto &rank = task.ranks[task.sendrank];
   auto &ch = rank.channels[cid];
+
   assert(ch.sendtail == ch.sendsizes.size() && ch.senddone == 0);
   ch.senddone = 1;
   auto &c = controller->cid2bypassed[cid];
