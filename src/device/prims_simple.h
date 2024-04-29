@@ -203,11 +203,9 @@ class Primitives<
 
     nelem = nelem < 0 ? 0 : nelem;
     int sliceSize = stepSize*StepPerSlice;
-    // if (tid == 0) {
-    //   printf("[tid=%d] nelem=%d, sliceSize=%d, stepSize=%d, StepPerSlice=%d
-    //   SlicePerChunk%d\n", tid, nelem, sliceSize, stepSize, StepPerSlice,
-    //   SlicePerChunk);
-    // }
+    if (tid == 0) {
+      printf("[tid=%d] prims: genericOp nelem=%d, sliceSize=%d, stepSize=%d, StepPerSlice=%d SlicePerChunk %d\n", tid, nelem, sliceSize, stepSize, StepPerSlice ,SlicePerChunk);
+    }
     sliceSize = max(divUp(nelem, 16*SlicePerChunk)*16, sliceSize/32);
     int slice = 0;
     int offset = 0;
