@@ -18,9 +18,10 @@ modController global_controller;
 
 static void calc_size_inkernel(int nelem, int tsize, vector<int> &res) {
   LOG_MOD(NCCL_MOD, "calc_size_inkernel: nelem=%d", nelem);
-  int stepSize = 131072*4/tsize; // DEFAULT_BUFFSIZE(simple) / NCCL_STEP / tsize
-  int SlicePerChunk = 2; // all reduce&gather
-  int StepPerSlice = 2;  //! i don't know why
+  int stepSize =
+      131072 * 4 / tsize; // DEFAULT_BUFFSIZE(simple) / NCCL_STEP / tsize
+  int SlicePerChunk = 2;  // all reduce&gather
+  int StepPerSlice = 2;   //! i don't know why
   int sliceSize = stepSize * StepPerSlice;
   sliceSize = std::max(DIVUP(nelem, 16 * SlicePerChunk) * 16, sliceSize / 32);
   int offset = 0, slice = 0;
@@ -42,141 +43,163 @@ static void calc_size_inkernel(int nelem, int tsize, vector<int> &res) {
 // calculate the expected send size for myrank
 // this is also used to calculated the recv size for the rank that will
 // receive from myrank
-static void calc_size_channel(int nranks, int ringindex, int count,
+
+static void calc_size_channel_AllReduce(int nranks, int ringindex, uint64_t count,
                               int nchannels, int mychannel, int nthreads,
-                              int tsize, int coll, vector<int> &res) {
-  if(coll==ncclFuncAllGather){
-    //allgather
-    const int chunkSize = 2097152;// const ssize_t chunkSize = int(Proto::calcBytePerStep()/sizeof(T) * (Proto::Id == NCCL_PROTO_SIMPLE ? ALLGATHER_CHUNKSTEPS : 1));
-    int bid = mychannel;//const int bid = args->bid; 
-    int loopSize = nchannels*int(chunkSize);
-    int size = count;
-    
-    int ringIx = ringindex;
-    int _ringRanks[2];_ringRanks[0]=ringIx;_ringRanks[1]=ringIx^1;// only can used when nranks ==2 !!!
-    LOG_MOD(NCCL_MOD, "ringindex= %d, count=%d,nchannels=%d, int mychannel=%d, int nthreads=%d,tsize=%d\n", ringindex,count,nchannels,mychannel,nthreads,tsize);
+                              int tsize, vector<int> &res) {
+  //allreduce
+  const int chunkSize = 524288;
+  int bid = mychannel;
+  int loopSize = nchannels * nranks * chunkSize;
+  ssize_t size = count;
+  int ringIx = ringindex;
 
-    LOG_MOD(NCCL_MOD, "nChennals: %d ; chunkSize: %d ; loopSize: %d ; size: %lu ; bid: %d\n",nchannels,chunkSize,loopSize,size,bid);
+  for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
+    ssize_t realChunkSize;
+    // if proto == Simple
+    realChunkSize =
+        min((long int)chunkSize, DIVUP(size - gridOffset, nchannels * nranks));
+    realChunkSize =
+        ROUNDUP(realChunkSize, (nthreads - 32) * sizeof(uint64_t) / tsize);
+    realChunkSize = int(realChunkSize);
 
-    for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
-      ssize_t realChunkSize;
-      realChunkSize = min(chunkSize, (int)divUp(size-gridOffset,nchannels));
-      LOG_MOD(NCCL_MOD, "realChunkSize-0: %lu\n",realChunkSize);
-      realChunkSize = roundUp(realChunkSize, (nthreads-32)*sizeof(uint64_t)/tsize);//warp_size==32; sizeof(t)=1
-      realChunkSize = int(realChunkSize);
     LOG_MOD(NCCL_MOD, "realChunkSize=%lu, nthreads=%d", realChunkSize,
-              nthreads);
-        ssize_t chunkOffset = gridOffset + int(bid*realChunkSize);
-        ssize_t offset;
-        int nelem = min(realChunkSize, size-chunkOffset);
-        int rankDest;
+            nthreads);
 
-        // step 0: push data to next GPU
-        rankDest = _ringRanks[0];
-        offset = chunkOffset + rankDest * size;
+    auto calcOffset = [&](int chunk) -> ssize_t {
+      return gridOffset + bid * nranks * realChunkSize + chunk * realChunkSize;
+    };
+    auto modRanks = [&](int r) -> int {
+      return r - (r >= nranks ? nranks : 0);
+    };
 
+    ssize_t offset;
+    int nelem;
+    int chunk;
 
-      // if (inputBuf + chunkOffset == outputBuf + offset) { // In place...?how to get this info?
-      //   prims.directSend(chunkOffset, offset, nelem);
-      // } else {
-      //   prims.directCopySend(chunkOffset, offset, nelem); // can like that? not same to allreduce.
-      // }
-      calc_size_inkernel(nelem,tsize,res);
-        // k-2 steps: copy to next GPU
-      for (int j=1; j<nranks-1; ++j) {
-        rankDest = _ringRanks[nranks-j];
-        offset = chunkOffset + rankDest * size;
-        
-        calc_size_inkernel(nelem, tsize, res);//prims.directRecvCopySend(offset, nelem); 
-      }
-        // Make final copy from buffer to dest.
-      rankDest = _ringRanks[1];
-      offset = chunkOffset + rankDest * size;
-      // Final wait/copy.
-      //prims.directRecv(offset, nelem); deleted
-    }
-    //allgather tsize=1
-    // for (int i = 0; i < res.size(); i++) {
-    //   res[i] *= tsize;
-    // }
-  } else{
-    //allreduce
-    const int chunkSize = 524288;
-    int bid = mychannel;
-    int loopSize = nchannels * nranks * chunkSize;
-    int size = count;
-    int ringIx = ringindex;
+    // step 0: push data to next GPU
+    chunk = modRanks(ringIx + nranks - 1);
+    offset = calcOffset(chunk);
+    nelem = std::min(realChunkSize, size - offset);
+    calc_size_inkernel(nelem, tsize,res);
 
-    for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
-      ssize_t realChunkSize;
-      // if proto == Simple
-      realChunkSize =
-          min(chunkSize, (int)DIVUP(size - gridOffset, nchannels * nranks));
-      realChunkSize =
-          ROUNDUP(realChunkSize, (nthreads - 32) * sizeof(uint64_t) / tsize);
-      realChunkSize = int(realChunkSize);
-
-      LOG_MOD(NCCL_MOD, "realChunkSize=%lu, nthreads=%d", realChunkSize,
-              nthreads);
-
-      auto calcOffset = [&](int chunk) -> ssize_t {
-        return gridOffset + bid * nranks * realChunkSize + chunk * realChunkSize;
-      };
-      auto modRanks = [&](int r) -> int {
-        return r - (r >= nranks ? nranks : 0);
-      };
-
-      ssize_t offset;
-      int nelem;
-      int chunk;
-
-      // step 0: push data to next GPU
-      chunk = modRanks(ringIx + nranks - 1);
-      offset = calcOffset(chunk);
-      nelem = std::min(realChunkSize, size - offset);
-      calc_size_inkernel(nelem, tsize,res);
-
-      // k-2 steps: reduce and copy to next GPU
-      for (int j = 2; j < nranks; ++j) {
-        chunk = modRanks(ringIx + nranks - j);
-        offset = calcOffset(chunk);
-        nelem = std::min(realChunkSize, size - offset);
-        calc_size_inkernel(nelem, tsize, res);
-      }
-
-      // step k-1: reduce this buffer and data, which will produce the final
-      // result that we store in this data and push to the next GPU
-      chunk = ringIx + 0;
+    // k-2 steps: reduce and copy to next GPU
+    for (int j = 2; j < nranks; ++j) {
+      chunk = modRanks(ringIx + nranks - j);
       offset = calcOffset(chunk);
       nelem = std::min(realChunkSize, size - offset);
       calc_size_inkernel(nelem, tsize, res);
-
-      // k-2 steps: copy to next GPU
-      for (int j = 1; j < nranks - 1; ++j) {
-        chunk = modRanks(ringIx + nranks - j);
-        offset = calcOffset(chunk);
-        nelem = std::min(realChunkSize, size - offset);
-        calc_size_inkernel(nelem, tsize, res);
-      }
     }
-    for (int i = 0; i < res.size(); i++) {
-      res[i] *= tsize;
+
+    // step k-1: reduce this buffer and data, which will produce the final
+    // result that we store in this data and push to the next GPU
+    chunk = ringIx + 0;
+    offset = calcOffset(chunk);
+    nelem = std::min(realChunkSize, size - offset);
+    calc_size_inkernel(nelem, tsize, res);
+
+    // k-2 steps: copy to next GPU
+    for (int j = 1; j < nranks - 1; ++j) {
+      chunk = modRanks(ringIx + nranks - j);
+      offset = calcOffset(chunk);
+      nelem = std::min(realChunkSize, size - offset);
+      calc_size_inkernel(nelem, tsize, res);
     }
   }
+  for (int i = 0; i < res.size(); i++) {
+    res[i] *= tsize;
+  }
+}
 
+static void calc_size_channel_AllGather(int nranks, int ringindex, uint64_t count,
+                              int nchannels, int mychannel, int nthreads,
+                              int tsize, vector<int> &res) {
+  // allgather
+  const int chunkSize =
+      2097152;         // const ssize_t chunkSize =
+                       // int(Proto::calcBytePerStep()/sizeof(T) * (Proto::Id ==
+                       // NCCL_PROTO_SIMPLE ? ALLGATHER_CHUNKSTEPS : 1));
+  int bid = mychannel; // const int bid = args->bid;
+  int loopSize = nchannels * int(chunkSize);
+  ssize_t size = count;
+
+  int ringIx = ringindex;
+  int _ringRanks[2];
+  _ringRanks[0] = ringIx;
+  _ringRanks[1] = ringIx ^ 1; // only can used when nranks ==2 !!!
+  LOG_MOD(NCCL_MOD,
+          "ringindex= %d, count=%lu,nchannels=%d, int mychannel=%d, int "
+          "nthreads=%d,tsize=%d\n",
+          ringindex, count, nchannels, mychannel, nthreads, tsize);
+
+  LOG_MOD(
+      NCCL_MOD,
+      "nChennals: %d ; chunkSize: %d ; loopSize: %d ; size: %lu ; bid: %d\n",
+      nchannels, chunkSize, loopSize, size, bid);
+
+  for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
+    ssize_t realChunkSize;
+    realChunkSize =
+        min((long int)chunkSize, divUp(size - gridOffset, nchannels));
+    LOG_MOD(NCCL_MOD, "realChunkSize-0: %lu\n", realChunkSize);
+    realChunkSize =
+        roundUp(realChunkSize, (nthreads - 32) * sizeof(uint64_t) /
+                                   tsize); // warp_size==32; sizeof(t)=1
+    realChunkSize = int(realChunkSize);
+    LOG_MOD(NCCL_MOD, "realChunkSize=%lu, nthreads=%d", realChunkSize,
+            nthreads);
+    ssize_t chunkOffset = gridOffset + int(bid * realChunkSize);
+    ssize_t offset;
+    int nelem = min(realChunkSize, size - chunkOffset);
+    int rankDest;
+
+    // step 0: push data to next GPU
+    rankDest = _ringRanks[0];
+    offset = chunkOffset + rankDest * size;
+
+    // if (inputBuf + chunkOffset == outputBuf + offset) { // In place...?how to
+    // get this info?
+    //   prims.directSend(chunkOffset, offset, nelem);
+    // } else {
+    //   prims.directCopySend(chunkOffset, offset, nelem); // can like that? not
+    //   same to allreduce.
+    // }
+    calc_size_inkernel(nelem, tsize, res);
+    // k-2 steps: copy to next GPU
+    for (int j = 1; j < nranks - 1; ++j) {
+      rankDest = _ringRanks[nranks - j];
+      offset = chunkOffset + rankDest * size;
+
+      calc_size_inkernel(nelem, tsize,
+                         res); // prims.directRecvCopySend(offset, nelem);
+    }
+    // Make final copy from buffer to dest.
+    rankDest = _ringRanks[1];
+    offset = chunkOffset + rankDest * size;
+    // Final wait/copy.
+    // prims.directRecv(offset, nelem); deleted
+  }
+  // allgather tsize=1
+  //  for (int i = 0; i < res.size(); i++) {
+  //    res[i] *= tsize;
+  //  }
 }
 
 static inline __attribute__((always_inline)) void
-calc_sendsize_channel(int nranks, int myrank, int count, int nchannels,
-                      int mychannel, int nthreads, int tsize,int coll,
-                      vector<int> &res) {
+calc_sendsize_channel(int nranks, int myrank, uint64_t count, int nchannels,
+                      int mychannel, int nthreads, int coll, vector<int> &res) {
   //   auto &ringmap = global_topology.ringmap;
   //   assert(ringmap.count(make_pair(myrank, mychannel)) > 0);
   // int myringix = ringmap[make_pair(myrank, mychannel)];
   //! todo multiple gpu per proc
   int myringix = myrank;
-  calc_size_channel(nranks, myringix, count, nchannels, mychannel, nthreads,
-                    tsize, coll, res);
+  if (coll == ncclFuncAllReduce)
+    calc_size_channel_AllReduce(nranks, myringix, count, nchannels, mychannel,
+                                nthreads, sizeof(float), res);
+  else
+    calc_size_channel_AllGather(nranks, myringix, count, nchannels, mychannel,
+                                nthreads, 1, res); // allgather
+
   std::string szs;
   for (int i = 0; i < res.size(); ++i) {
     szs = szs + " " + std::to_string(res[i]);
@@ -186,9 +209,8 @@ calc_sendsize_channel(int nranks, int myrank, int count, int nchannels,
 }
 
 static inline __attribute__((always_inline)) void
-calc_recvsize_channel(int nranks, int myrank, int count, int nchannels,
-                      int mychannel, int nthreads, int tsize, int coll,
-                      vector<int> &res) {
+calc_recvsize_channel(int nranks, int myrank, uint64_t count, int nchannels,
+                      int mychannel, int nthreads, int coll, vector<int> &res) {
   //   auto &ringmap = global_topology.ringmap;
   //   assert(ringmap.count(make_pair(myrank, mychannel)) > 0);
   //   int target = global_topology.prev[myrank];
@@ -196,8 +218,14 @@ calc_recvsize_channel(int nranks, int myrank, int count, int nchannels,
   //! todo
   int target = (myrank + 1) % nranks;
   int target_ringix = target;
-  calc_size_channel(nranks, target_ringix, count, nchannels, mychannel,
-                    nthreads, tsize, coll, res);
+
+  if (coll == ncclFuncAllReduce)
+    calc_size_channel_AllReduce(nranks, target_ringix, count, nchannels,
+                                mychannel, nthreads, sizeof(float), res);
+  else
+    calc_size_channel_AllGather(nranks, target_ringix, count, nchannels,
+                                mychannel, nthreads, 1, res); // allgather
+
   std::string szs;
   for (int i = 0; i < res.size(); ++i) {
     szs = szs + " " + std::to_string(res[i]);
@@ -209,7 +237,7 @@ calc_recvsize_channel(int nranks, int myrank, int count, int nchannels,
 
 static inline __attribute__((always_inline)) void
 channelInit(modChannelInfo *ch, modRankInfo *rankinfo, int nranks, int myrank,
-            int chid, int count, int nchannels, int nthreads, int coll) {
+            int chid, uint64_t count, int nchannels, int nthreads, int coll) {
   ch->bid = chid;
   ch->sendsizes = vector<int>();
   ch->recvsizes = vector<int>();
@@ -217,11 +245,11 @@ channelInit(modChannelInfo *ch, modRankInfo *rankinfo, int nranks, int myrank,
   ch->recv = rankinfo->recv;
   if (rankinfo->send) {
     calc_sendsize_channel(nranks, myrank, count, nchannels, chid, nthreads,
-                          (coll==ncclFuncAllReduce?sizeof(float):1), coll, ch->sendsizes);
+                          coll, ch->sendsizes);
   }
   if (rankinfo->recv) {
     calc_recvsize_channel(nranks, myrank, count, nchannels, chid, nthreads,
-                          (coll==ncclFuncAllReduce?sizeof(float):1), coll, ch->recvsizes);
+                          coll, ch->recvsizes);
   }
   ch->sendtail = 0;
   ch->recvtail = 0;
@@ -237,7 +265,7 @@ rankInit(modRankInfo *rankinfo, modEmulatorTask *task, modCommInfo *comm,
   int nchannels = task->info.nchannels;
   int nthreads = task->info.nthreads;
   int nranks = comm->nranks;
-  int count = task->info.count;
+  uint64_t count = task->info.count;
   rankinfo->done = 0;
   rankinfo->myrank = rank;
   rankinfo->send = 0;
