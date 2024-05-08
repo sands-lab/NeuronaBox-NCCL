@@ -29,6 +29,9 @@ namespace {
     Primitives<T, RedOp, FanSymmetric<1>, 1, Proto, 0> prims
       (tid, nthreads, &ring->prev, &ring->next, inputBuf, outputBuf, args->redOpArg);
 
+    int ringIx = ring->index;
+
+
     for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
       ssize_t realChunkSize;
       if (Proto::Id == NCCL_PROTO_SIMPLE) {
@@ -56,24 +59,16 @@ namespace {
 
       if (inputBuf + chunkOffset == outputBuf + offset) { // In place
         prims.directSend(chunkOffset, offset, nelem);
+        //printf("allgather inplace!\n");
       } else {
         prims.directCopySend(chunkOffset, offset, nelem);
       }
-      // if (tid == 0) {
-      //   printf("AllGather: step 0, rankDest: %d, offset: %lu, nelem: %d\n",
-      //          rankDest, offset, nelem);
-      // }
       // k-2 steps: copy to next GPU
       for (int j=1; j<nranks-1; ++j) {
         rankDest = ringRanks[nranks-j];
         offset = chunkOffset + rankDest * size;
 
         prims.directRecvCopySend(offset, nelem);
-        // if (tid == 0) {
-        //   printf("AllGather: step %d, rankDest: %d, offset: %lu, nelem:
-        //   %d\n",
-        //          j, rankDest, offset, nelem);
-        // }
       }
 
       // Make final copy from buffer to dest.
@@ -81,10 +76,8 @@ namespace {
       offset = chunkOffset + rankDest * size;
       // Final wait/copy.
       prims.directRecv(offset, nelem);
-      // if (tid == 0) {
-      //   printf("AllGather: step %d, rankDest: %d, offset: %lu, nelem: %d\n",
-      //          nranks - 1, rankDest, offset, nelem);
-      // }
+      if (tid == 0) {
+      }
     }
   }
 }

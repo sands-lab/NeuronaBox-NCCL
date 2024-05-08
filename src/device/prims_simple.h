@@ -203,12 +203,13 @@ class Primitives<
 
     nelem = nelem < 0 ? 0 : nelem;
     int sliceSize = stepSize*StepPerSlice;
-    // if (tid == 0) {
-    //   printf("[tid=%d] nelem=%d, sliceSize=%d, stepSize=%d, StepPerSlice=%d
-    //   SlicePerChunk%d\n", tid, nelem, sliceSize, stepSize, StepPerSlice,
-    //   SlicePerChunk);
-    // }
+
     sliceSize = max(divUp(nelem, 16*SlicePerChunk)*16, sliceSize/32);
+    // if (tid == 0) {
+    //   printf("[tid=%d] prims: genericOp nelem=%d, sliceSize0=%d, sliceSize1=%d,stepSize=%d, StepPerSlice=%d SlicePerChunk %d\n", tid, nelem, (int)stepSize*StepPerSlice,sliceSize, stepSize, StepPerSlice ,SlicePerChunk);
+    // }
+
+
     int slice = 0;
     int offset = 0;
 
@@ -257,9 +258,13 @@ class Primitives<
           ncclShmem.groups[group].srcs[0] = userBuff + srcIx + offset;
         if (Dst && (flags & (DstBuf == Input ? RoleInput : RoleOutput)))
           ncclShmem.groups[group].dsts[0] = userBuff + dstIx + offset;
+        //if (tid == 0) printf("gemericOp: start_waitPear_0: sliceSize=%d\n",(int)sliceSize);
+
         waitPeer<DirectRecv, DirectSend, Recv, Send, Src, Dst>(
             srcIx, dstIx, offset, sliceSize);
+        //if (tid == 0) printf("gemericOp: end_waitPear_0: sliceSize=%d\n",(int)sliceSize);
         subBarrier();
+        //if (tid == 0) printf("gemericOp: end_subbarrier_0: sliceSize=%d\n",(int)sliceSize);
         /* if user abort the kernel, we don't need to actually perform
          * copy/reduce; just set size to 0 to avoid unnecessary workload. */
         int workSize = ncclShmem.aborted ? 0 : sliceSize;
@@ -339,13 +344,17 @@ class Primitives<
       sliceSize = sliceSize < nelem-offset ? sliceSize : nelem-offset;
       { // Only workers could have Wait roles so we know the slice must be empty
         // since we've exited the loop above.
+        //if (tid == 0) printf("gemericOp: start_waitPear_1: sliceSize=%d\n",(int)sliceSize);
         waitPeer<DirectRecv, DirectSend, Recv, Send, Src, Dst>(0, 0, 0, 0);
+        //if (tid == 0) printf("gemericOp: end_waitPear_1: sliceSize=%d\n",(int)sliceSize);
       }
       barrier(); // Has couterpart in preceding worker-only loop.
+      //if (tid == 0) printf("gemericOp: end_barrier_1: sliceSize=%d\n",(int)sliceSize);
       postPeer<Recv, Send>(0 < sliceSize);
       offset += sliceSize;
       slice += 1;
     }
+  //if(tid==0)printf("gemericOp: end!_out_exit!");
   }
 
   // Scatter/Gather generic op
@@ -358,6 +367,7 @@ class Primitives<
     constexpr int DirectSend = 1 && Direct && DirectSend1;
     int offset = 0; // slice offset
     int sliceSize = stepSize*StepPerSlice;
+    //printf("_in scatterGatherOp_in!");
     int dataSize = max(DIVUP(peerElem, 16*SlicePerChunk)*16, sliceSize/32);  // per-peer slice size
 
     #pragma unroll
