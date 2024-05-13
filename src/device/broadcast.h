@@ -23,7 +23,16 @@ namespace {
     const int rank = ring->userRanks[0];
     const int nextRank = ring->userRanks[1];
     const int root = args->root;
+    if (tid == 0) {
+          printf("[nccl]aaaaaaaaa Broadcast root: %d rank: %d nextRank: %d\n", root,rank,nextRank);
+          printf("[kernel] broadcast ring\n");
+          printf("[tid=0] inside broadcast run_ring! nthread=%d, proto:id=%d "
+                "chunkSize=%lu,  sizeof(T)=%lu, loopsize=%lu, "
+                "bid=%d, count=%lu, ringix=%d\n",
+                nthreads, Proto::Id, chunkSize,  sizeof(T), loopSize,
+                bid, size, ring->index);
 
+    }
     T *inputBuf = (T*)args->sendbuff;
     T *outputBuf = (T*)args->recvbuff;
     Primitives<T, RedOp, FanSymmetric<1>, 0, Proto, 0>
@@ -45,22 +54,22 @@ namespace {
       int nelem = min(realChunkSize, size-offset);
 
       if (rank == root) {
-        // if (tid == 0) {
-        //   printf("[nccl] Broadcast @root offset %d nelem %ld\n", root,
-        //   offset,
-        //          nelem);
-        // }
+        if (tid == 0) {
+          printf("[nccl] Broadcast @root offset %d nelem %ld\n", root,
+          offset,
+                 nelem);
+        }
         if (inputBuf == outputBuf) {
           prims.send(offset, nelem);
         } else {
           prims.copySend(offset, offset, nelem);
         }
       } else if (nextRank == root) {
-        // if (tid == 0) {
-        //   printf("[nccl] Broadcast @next_to_root offset %d nelem %ld\n",
-        //   root,
-        //          offset, nelem);
-        // }
+        if (tid == 0) {
+          printf("[nccl] Broadcast @next_to_root offset %d nelem %ld\n",
+          root,
+                 offset, nelem);
+        }
         prims.recv(offset, nelem);
       } else {
         prims.recvCopySend(offset, nelem);
