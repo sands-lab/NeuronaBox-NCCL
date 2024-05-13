@@ -58,7 +58,7 @@ static void calc_size_channel_AllReduce(int nranks, int ringindex, uint64_t coun
     ssize_t realChunkSize;
     // if proto == Simple
     realChunkSize =
-        min((long int)chunkSize, DIVUP(size - gridOffset, nchannels * nranks));
+        min((uint64_t)chunkSize, DIVUP(size - gridOffset, nchannels * nranks));
     realChunkSize =
         ROUNDUP(realChunkSize, (nthreads - 32) * sizeof(uint64_t) / tsize);
     realChunkSize = int(realChunkSize);
@@ -140,7 +140,7 @@ static void calc_size_channel_AllGather(int nranks, int ringindex, uint64_t coun
   for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
     ssize_t realChunkSize;
     realChunkSize =
-        min((long int)chunkSize, divUp(size - gridOffset, nchannels));
+        min((uint64_t)chunkSize, divUp(size - gridOffset, nchannels));
     LOG_MOD(NCCL_MOD, "realChunkSize-0: %lu\n", realChunkSize);
     realChunkSize =
         roundUp(realChunkSize, (nthreads - 32) * sizeof(uint64_t) /
