@@ -334,10 +334,13 @@ calc_sendsize_channel(int nranks, int myrank, uint64_t count, int nchannels,
   else if (coll == ncclFuncAllGather)
     calc_size_channel_AllGather(nranks, myringix, count, nchannels, mychannel,
                                 nthreads, 1, res); // allgather
-  else // if (coll == ncclFuncBroadcast)
+  else if (coll == ncclFuncBroadcast)
     calc_size_channel_Broadcast(nranks, myringix, count, nchannels, mychannel,
                                 nthreads, 1, root, res); // broadcast
-
+  else {
+    printf("unsupported coll type!");
+    abort();
+  }
   std::string szs;
   for (int i = 0; i < res.size(); ++i) {
     szs = szs + " " + std::to_string(res[i]);
@@ -368,9 +371,14 @@ calc_recvsize_channel(int nranks, int myrank, uint64_t count, int nchannels,
   else if (coll == ncclFuncAllGather)
     calc_size_channel_AllGather(nranks, target_ringix, count, nchannels,
                                 mychannel, nthreads, 1, res); // allgather
-  else // if (coll == ncclFuncBroadcast)
+  else  if (coll == ncclFuncBroadcast)
     calc_size_channel_Broadcast(nranks, target_ringix, count, nchannels,
                                 mychannel, nthreads, 1, root, res); // broadcast
+  else {
+    printf("unsupported coll type!");
+    abort();
+  }
+  
   std::string szs;
   for (int i = 0; i < res.size(); ++i) {
     szs = szs + " " + std::to_string(res[i]);
