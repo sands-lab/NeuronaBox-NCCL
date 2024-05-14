@@ -76,8 +76,6 @@ namespace {
       offset = chunkOffset + rankDest * size;
       // Final wait/copy.
       prims.directRecv(offset, nelem);
-      if (tid == 0) {
-      }
     }
   }
 }

@@ -23,7 +23,6 @@ namespace {
     const int rank = ring->userRanks[0];
     const int nextRank = ring->userRanks[1];
     const int root = args->root;
-
     T *inputBuf = (T*)args->sendbuff;
     T *outputBuf = (T*)args->recvbuff;
     Primitives<T, RedOp, FanSymmetric<1>, 0, Proto, 0>

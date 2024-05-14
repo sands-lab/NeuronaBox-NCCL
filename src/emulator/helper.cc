@@ -4,6 +4,7 @@ using namespace std;
 
 void Info2Task(ncclInfo *info, modTaskInfo *task) {
   task->count = info->count;
+  task->root = info->root;
   task->tsize = 0;
   if (info->datatype == ncclInt8)
     task->tsize = 1;
@@ -34,7 +35,7 @@ void Info2Task(ncclInfo *info, modTaskInfo *task) {
   task->unique_id = info->unique_id;
   LOG_MOD(NCCL_MOD,
           "Info2Task: count %lu, tsize %d, coll %d, reduceOp %d, algo %d, proto "
-          "%d, nchannels %d, nthreads %d, unique_id %lu",
+          "%d, nchannels %d, nthreads %d, unique_id %lu, root %d",
           task->count, task->tsize, task->coll, task->reduceOp, task->algo,
-          task->proto, task->nchannels, task->nthreads, task->unique_id);
+          task->proto, task->nchannels, task->nthreads, task->unique_id,task->root);
 }

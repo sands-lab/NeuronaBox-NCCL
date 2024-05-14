@@ -16,12 +16,23 @@ using namespace std;
 
 modController global_controller;
 
-static void calc_size_inkernel(int nelem, int tsize, vector<int> &res) {
+
+
+static void calc_size_inkernel(int coll, int nelem, int tsize,vector<int> &res) {
   LOG_MOD(NCCL_MOD, "calc_size_inkernel: nelem=%d", nelem);
-  int stepSize =
-      131072 * 4 / tsize; // DEFAULT_BUFFSIZE(simple) / NCCL_STEP / tsize
-  int SlicePerChunk = 2;  // all reduce&gather
-  int StepPerSlice = 2;   //! i don't know why
+  int stepSize = (coll == ncclFuncAllGather || coll == ncclFuncAllReduce ||
+                  coll == ncclFuncReduceScatter)
+                     ? (131072 * 4 / tsize)
+                     : 524288; // DEFAULT_BUFFSIZE(simple) / NCCL_STEP / tsize
+  int SlicePerChunk = (coll == ncclFuncAllGather || coll == ncclFuncAllReduce ||
+                       coll == ncclFuncReduceScatter)
+                          ? 2
+                          : 1;
+  int StepPerSlice = (coll == ncclFuncAllGather || coll == ncclFuncAllReduce ||
+                      coll == ncclFuncReduceScatter)
+                         ? 2
+                         : 1; //! i don't know why
+
   int sliceSize = stepSize * StepPerSlice;
   sliceSize = std::max(DIVUP(nelem, 16 * SlicePerChunk) * 16, sliceSize / 32);
   int offset = 0, slice = 0;
@@ -58,7 +69,8 @@ static void calc_size_channel_AllReduce(int nranks, int ringindex, uint64_t coun
     ssize_t realChunkSize;
     // if proto == Simple
     realChunkSize =
-        min((long int)chunkSize, DIVUP(size - gridOffset, nchannels * nranks));
+        min((uint64_t)chunkSize, (uint64_t)DIVUP(size - gridOffset, nchannels * nranks));
+
     realChunkSize =
         ROUNDUP(realChunkSize, (nthreads - 32) * sizeof(uint64_t) / tsize);
     realChunkSize = int(realChunkSize);
@@ -81,14 +93,18 @@ static void calc_size_channel_AllReduce(int nranks, int ringindex, uint64_t coun
     chunk = modRanks(ringIx + nranks - 1);
     offset = calcOffset(chunk);
     nelem = std::min(realChunkSize, size - offset);
-    calc_size_inkernel(nelem, tsize,res);
+    calc_size_inkernel(ncclFuncAllReduce, nelem, tsize,res);
+
+
 
     // k-2 steps: reduce and copy to next GPU
     for (int j = 2; j < nranks; ++j) {
       chunk = modRanks(ringIx + nranks - j);
       offset = calcOffset(chunk);
       nelem = std::min(realChunkSize, size - offset);
-      calc_size_inkernel(nelem, tsize, res);
+
+      calc_size_inkernel(ncclFuncAllReduce, nelem, tsize, res);
+
     }
 
     // step k-1: reduce this buffer and data, which will produce the final
@@ -96,14 +112,16 @@ static void calc_size_channel_AllReduce(int nranks, int ringindex, uint64_t coun
     chunk = ringIx + 0;
     offset = calcOffset(chunk);
     nelem = std::min(realChunkSize, size - offset);
-    calc_size_inkernel(nelem, tsize, res);
+
+    calc_size_inkernel(ncclFuncAllReduce, nelem, tsize, res);
+
 
     // k-2 steps: copy to next GPU
     for (int j = 1; j < nranks - 1; ++j) {
       chunk = modRanks(ringIx + nranks - j);
       offset = calcOffset(chunk);
       nelem = std::min(realChunkSize, size - offset);
-      calc_size_inkernel(nelem, tsize, res);
+      calc_size_inkernel(ncclFuncAllReduce, nelem, tsize, res);
     }
   }
   for (int i = 0; i < res.size(); i++) {
@@ -140,7 +158,7 @@ static void calc_size_channel_AllGather(int nranks, int ringindex, uint64_t coun
   for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
     ssize_t realChunkSize;
     realChunkSize =
-        min((long int)chunkSize, divUp(size - gridOffset, nchannels));
+        min((uint64_t)chunkSize, (uint64_t)divUp(size - gridOffset, nchannels));
     LOG_MOD(NCCL_MOD, "realChunkSize-0: %lu\n", realChunkSize);
     realChunkSize =
         roundUp(realChunkSize, (nthreads - 32) * sizeof(uint64_t) /
@@ -164,13 +182,13 @@ static void calc_size_channel_AllGather(int nranks, int ringindex, uint64_t coun
     //   prims.directCopySend(chunkOffset, offset, nelem); // can like that? not
     //   same to allreduce.
     // }
-    calc_size_inkernel(nelem, tsize, res);
+    calc_size_inkernel(ncclFuncAllGather, nelem, tsize, res);
     // k-2 steps: copy to next GPU
     for (int j = 1; j < nranks - 1; ++j) {
       rankDest = _ringRanks[nranks - j];
       offset = chunkOffset + rankDest * size;
 
-      calc_size_inkernel(nelem, tsize,
+      calc_size_inkernel(ncclFuncAllGather, nelem, tsize,
                          res); // prims.directRecvCopySend(offset, nelem);
     }
     // Make final copy from buffer to dest.
@@ -185,9 +203,132 @@ static void calc_size_channel_AllGather(int nranks, int ringindex, uint64_t coun
   //  }
 }
 
+void calc_size_channel_Broadcast(int nranks, int ringindex, uint64_t count,
+                                 int nchannels, int mychannel, int nthreads,
+                                 int tsize, int root, vector<int> &res) {
+  // broadcast
+
+  if (root == -1)
+    LOG_MOD(NCCL_MOD, "broadcast root=-1, something is wrong!!!");
+  const int chunkSize =
+      524288; // const ssize_t chunkSize =
+              // int(Proto::calcBytePerStep()/sizeof(T) * (Proto::Id ==
+              // NCCL_PROTO_SIMPLE ? BROADCAST_CHUNKSTEPS : 1));
+  // BROADCAST_CHUNKSTEPS == 1
+
+  int bid = mychannel; // const int bid = args->bid;
+  ssize_t loopSize = nchannels * int(chunkSize);
+  ssize_t size = count;
+
+  int ringIx = ringindex;
+  int rank = ringIx;         // const int rank = ring->userRanks[0];
+  int nextRank = ringIx ^ 1; // const int nextRank = ring->userRanks[1];
+
+  for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
+    ssize_t realChunkSize;
+    // if (Proto::Id == NCCL_PROTO_SIMPLE)
+    realChunkSize =
+        min((uint64_t)chunkSize, (uint64_t)divUp(size - gridOffset, nchannels));
+    realChunkSize =
+        roundUp(realChunkSize, (nthreads - 32) * sizeof(uint64_t) / tsize);
+    realChunkSize = int(realChunkSize);
+
+    ssize_t offset = gridOffset + int(bid * realChunkSize);
+    int nelem = min(realChunkSize, size - offset);
+
+    if (rank == root) {
+      // if (tid == 0) {
+      //   printf("[nccl] Broadcast @root offset %d nelem %ld\n", root,
+      //   offset,
+      //          nelem);
+      // }
+      calc_size_inkernel(ncclFuncBroadcast, nelem, tsize, res);
+      // if (inputBuf == outputBuf) {
+      //   prims.send(offset, nelem);
+      // } else {
+      //   prims.copySend(offset, offset, nelem);
+      // }
+    } else if (nextRank == root) {
+      // if (tid == 0) {
+      //   printf("[nccl] Broadcast @next_to_root offset %d nelem %ld\n",
+      //   root,
+      //          offset, nelem);
+      // }
+      // prims.recv(offset, nelem);
+    } else {
+      calc_size_inkernel(ncclFuncBroadcast, nelem, tsize, res);
+      // prims.recvCopySend(offset, nelem);
+    }
+  }
+}
+
+void calc_size_channel_ReduceScatter(int nranks, int ringindex, uint64_t count,
+                                 int nchannels, int mychannel, int nthreads,
+                                 int tsize, vector<int> &res) {
+
+  const int chunkSize =
+      524288; // int(Proto::calcBytePerStep()/sizeof(T) * (Proto::Id == NCCL_PROTO_SIMPLE ? REDUCESCATTER_CHUNKSTEPS : 1));
+
+  int bid = mychannel; // const int bid = args->bid;
+  ssize_t loopSize = nchannels * int(chunkSize);
+  ssize_t size = count;
+
+  int ringIx = ringindex;
+  int rank = ringIx;         // const int rank = ring->userRanks[0];
+  int nextRank = ringIx ^ 1; // const int nextRank = ring->userRanks[1];
+
+  int _ringRanks[2];
+  _ringRanks[0] = ringIx;
+  _ringRanks[1] = ringIx ^ 1; // only can used when nranks ==2 !!!
+
+  for (ssize_t gridOffset = 0; gridOffset < size; gridOffset += loopSize) {
+    ssize_t realChunkSize;
+    //if (Proto::Id == NCCL_PROTO_SIMPLE)
+    realChunkSize = min((uint64_t)chunkSize, (uint64_t)divUp(size-gridOffset, nchannels));
+    realChunkSize = roundUp(realChunkSize, (nthreads-32)*sizeof(uint64_t)/tsize);
+    realChunkSize = int(realChunkSize);
+
+    ssize_t chunkOffset = gridOffset + bid*int(realChunkSize);
+
+    /////////////// begin ReduceScatter steps ///////////////
+    ssize_t offset;
+    int nelem = min(realChunkSize, size-chunkOffset);
+    int rankDest;
+
+    // step 0: push data to next GPU
+    rankDest = _ringRanks[nranks-1];
+    offset = chunkOffset + rankDest * size;
+    //prims.send(offset, nelem);
+    calc_size_inkernel(ncclFuncReduceScatter, nelem, tsize, res);
+
+    // k-2 steps: reduce and copy to next GPU
+    for (int j=2; j<nranks; ++j) {
+      rankDest = _ringRanks[nranks-j];
+      offset = chunkOffset + rankDest * size;
+      //prims.recvReduceSend(offset, nelem);
+      calc_size_inkernel(ncclFuncReduceScatter, nelem, tsize, res);
+
+    }
+
+    // step k-1: reduce this buffer and data, which will produce the final result
+    rankDest = _ringRanks[0];
+    offset = chunkOffset + rankDest * size;
+    //prims.recvReduceCopy(offset, chunkOffset, nelem, /*postOp=*/true);
+  }
+  for (int i = 0; i < res.size(); i++) {
+    res[i] *= tsize;
+  }
+}
+
+
+
+
+
 static inline __attribute__((always_inline)) void
 calc_sendsize_channel(int nranks, int myrank, uint64_t count, int nchannels,
-                      int mychannel, int nthreads, int coll, vector<int> &res) {
+                      int mychannel, int nthreads, int coll, vector<int> &res,
+                      int root) {
+  // root is only for broadcast
   //   auto &ringmap = global_topology.ringmap;
   //   assert(ringmap.count(make_pair(myrank, mychannel)) > 0);
   // int myringix = ringmap[make_pair(myrank, mychannel)];
@@ -196,10 +337,19 @@ calc_sendsize_channel(int nranks, int myrank, uint64_t count, int nchannels,
   if (coll == ncclFuncAllReduce)
     calc_size_channel_AllReduce(nranks, myringix, count, nchannels, mychannel,
                                 nthreads, sizeof(float), res);
-  else
+  else if (coll == ncclFuncReduceScatter)
+    calc_size_channel_ReduceScatter(nranks, myringix, count, nchannels,
+                                    mychannel, nthreads, sizeof(float), res);
+  else if (coll == ncclFuncAllGather)
     calc_size_channel_AllGather(nranks, myringix, count, nchannels, mychannel,
                                 nthreads, 1, res); // allgather
-
+  else if (coll == ncclFuncBroadcast)
+    calc_size_channel_Broadcast(nranks, myringix, count, nchannels, mychannel,
+                                nthreads, 1, root, res); // broadcast
+  else {
+    printf("unsupported coll type!");
+    abort();
+  }
   std::string szs;
   for (int i = 0; i < res.size(); ++i) {
     szs = szs + " " + std::to_string(res[i]);
@@ -210,7 +360,8 @@ calc_sendsize_channel(int nranks, int myrank, uint64_t count, int nchannels,
 
 static inline __attribute__((always_inline)) void
 calc_recvsize_channel(int nranks, int myrank, uint64_t count, int nchannels,
-                      int mychannel, int nthreads, int coll, vector<int> &res) {
+                      int mychannel, int nthreads, int coll, vector<int> &res,
+                      int root) {
   //   auto &ringmap = global_topology.ringmap;
   //   assert(ringmap.count(make_pair(myrank, mychannel)) > 0);
   //   int target = global_topology.prev[myrank];
@@ -222,10 +373,20 @@ calc_recvsize_channel(int nranks, int myrank, uint64_t count, int nchannels,
   if (coll == ncclFuncAllReduce)
     calc_size_channel_AllReduce(nranks, target_ringix, count, nchannels,
                                 mychannel, nthreads, sizeof(float), res);
-  else
+  else if (coll == ncclFuncReduceScatter)
+    calc_size_channel_ReduceScatter(nranks, target_ringix, count, nchannels,
+                                    mychannel, nthreads, sizeof(float), res);
+  else if (coll == ncclFuncAllGather)
     calc_size_channel_AllGather(nranks, target_ringix, count, nchannels,
                                 mychannel, nthreads, 1, res); // allgather
-
+  else  if (coll == ncclFuncBroadcast)
+    calc_size_channel_Broadcast(nranks, target_ringix, count, nchannels,
+                                mychannel, nthreads, 1, root, res); // broadcast
+  else {
+    printf("unsupported coll type!");
+    abort();
+  }
+  
   std::string szs;
   for (int i = 0; i < res.size(); ++i) {
     szs = szs + " " + std::to_string(res[i]);
@@ -237,7 +398,8 @@ calc_recvsize_channel(int nranks, int myrank, uint64_t count, int nchannels,
 
 static inline __attribute__((always_inline)) void
 channelInit(modChannelInfo *ch, modRankInfo *rankinfo, int nranks, int myrank,
-            int chid, uint64_t count, int nchannels, int nthreads, int coll) {
+            int chid, uint64_t count, int nchannels, int nthreads, int coll,
+            int root) {
   ch->bid = chid;
   ch->sendsizes = vector<int>();
   ch->recvsizes = vector<int>();
@@ -245,18 +407,19 @@ channelInit(modChannelInfo *ch, modRankInfo *rankinfo, int nranks, int myrank,
   ch->recv = rankinfo->recv;
   if (rankinfo->send) {
     calc_sendsize_channel(nranks, myrank, count, nchannels, chid, nthreads,
-                          coll, ch->sendsizes);
+                          coll, ch->sendsizes, root);
   }
   if (rankinfo->recv) {
     calc_recvsize_channel(nranks, myrank, count, nchannels, chid, nthreads,
-                          coll, ch->recvsizes);
+                          coll, ch->recvsizes, root);
   }
   ch->sendtail = 0;
   ch->recvtail = 0;
   ch->senddone = 0;
   ch->recvdone = 0;
-  LOG_MOD(NCCL_MOD, "channelInit: myrank=%d, chid=%d, send=%d, recv=%d",
-          rankinfo->myrank, chid, ch->send, ch->recv);
+  LOG_MOD(NCCL_MOD,
+          "channelInit: myrank=%d, chid=%d, send=%d, recv=%d, root=%d\n",
+          rankinfo->myrank, chid, ch->send, ch->recv, root);
 }
 
 static inline __attribute__((always_inline)) void
@@ -284,7 +447,7 @@ rankInit(modRankInfo *rankinfo, modEmulatorTask *task, modCommInfo *comm,
   for (int i = 0; i < nchannels; ++i) {
     modChannelInfo ch;
     channelInit(&ch, rankinfo, nranks, rank, i, count, nchannels, nthreads,
-                task->info.coll);
+                task->info.coll,task->info.root);
     //! todo fix tsize
     rankinfo->channels.push_back(ch);
   }
@@ -292,7 +455,10 @@ rankInit(modRankInfo *rankinfo, modEmulatorTask *task, modCommInfo *comm,
 
 static inline __attribute__((always_inline)) int
 bypassCheckInternal(modTaskInfo info, uint64_t unique_id) {
-  return MOD_KERNEL_BYPASS == 1 && (info.coll == ncclFuncAllReduce||info.coll == ncclFuncAllGather) &&
+  return MOD_KERNEL_BYPASS == 1 &&
+         (info.coll == ncclFuncAllReduce || info.coll == ncclFuncAllGather ||
+          info.coll == ncclFuncBroadcast ||
+          info.coll == ncclFuncReduceScatter) &&
          unique_id >= 0;
 }
 
@@ -359,6 +525,8 @@ check_done_task(modEmulatorTask *task) {
     return 1;
   }
   int done = 1;
+    LOG_MOD(NCCL_MOD, "start check_done_task: done=%d, unique_id=%lu, rksize=%lu",
+            done, task->info.unique_id, task->ranks.size());
   for (int i = 0; i < task->ranks.size(); ++i) {
     done = done & check_done_rank(&task->ranks[i]);
   }
@@ -620,6 +788,7 @@ __attribute__((always_inline)) int modProxyRecvDone(modController *controller,
   auto &task = controller->id2task[unique_id];
   auto &rank = task.ranks[task.recvrank];
   auto &ch = rank.channels[cid];
+  LOG_MOD(NCCL_MOD, "modProxyRecvDone  start ch.recvtail: %d, ch.recvsizes.size(): %d  ch.recvdone: %d\n",ch.recvtail, ch.recvsizes.size(),(int)ch.recvdone);  
   assert(ch.recvtail == ch.recvsizes.size() && ch.recvdone == 0);
   ch.recvdone = 1;
   auto &c = controller->cid2bypassed[cid];

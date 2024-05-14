@@ -205,9 +205,7 @@ class Primitives<
     int sliceSize = stepSize*StepPerSlice;
 
     sliceSize = max(divUp(nelem, 16*SlicePerChunk)*16, sliceSize/32);
-    // if (tid == 0) {
-    //   printf("[tid=%d] prims: genericOp nelem=%d, sliceSize0=%d, sliceSize1=%d,stepSize=%d, StepPerSlice=%d SlicePerChunk %d\n", tid, nelem, (int)stepSize*StepPerSlice,sliceSize, stepSize, StepPerSlice ,SlicePerChunk);
-    // }
+
 
 
     int slice = 0;
@@ -369,6 +367,15 @@ class Primitives<
     int sliceSize = stepSize*StepPerSlice;
     //printf("_in scatterGatherOp_in!");
     int dataSize = max(DIVUP(peerElem, 16*SlicePerChunk)*16, sliceSize/32);  // per-peer slice size
+
+
+    // if (tid == 0) {
+    //   printf("[tid=%d] prims: scattergenericOp , stepsize=%d, sliceSize0=%d, sliceSize1=%d,stepSize=%d, StepPerSlice=%d SlicePerChunk %d\n", tid, (int)stepSize, (int)stepSize*StepPerSlice,sliceSize, stepSize, StepPerSlice ,SlicePerChunk);
+    // }
+
+
+
+
 
     #pragma unroll
     for (int slice=0; slice<SlicePerChunk; ++slice) {
@@ -555,9 +562,7 @@ class Primitives<
     tid(tid), nthreads(nthreads), tidInBlock(threadIdx.x), group(group),
     stepSize(stepSize_ == 0 ? ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE]/NCCL_STEPS/sizeof(T) : stepSize_) {
     // if (tid == 0) {
-    //   printf("At primitives init: nthreads=%d, tid=%d, tidInBlk=%d, group=%d,
-    //   "
-    //          "stepsize_=%d, bufsize=%d, ncclstep=%d\n",
+    //   printf("At primitives init: nthreads=%d, tid=%d, tidInBlk=%d, group=%d,stepsize_=%d, bufsize=%d, ncclstep=%d\n",
     //          nthreads, tid, tidInBlock, group, stepSize_,
     //          ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE], NCCL_STEPS);
     // }
