@@ -16,6 +16,7 @@ using namespace std;
 
 modController global_controller;
 
+
 static void calc_size_inkernel(int coll, int nelem, int tsize,vector<int> &res) {
   LOG_MOD(NCCL_MOD, "calc_size_inkernel: nelem=%d", nelem);
   int stepSize = (coll == ncclFuncAllGather || coll == ncclFuncAllReduce ||
@@ -90,6 +91,7 @@ static void calc_size_channel_AllReduce(int nranks, int ringindex, uint64_t coun
     offset = calcOffset(chunk);
     nelem = std::min(realChunkSize, size - offset);
     calc_size_inkernel(ncclFuncAllReduce, nelem, tsize,res);
+
 
     // k-2 steps: reduce and copy to next GPU
     for (int j = 2; j < nranks; ++j) {
@@ -335,6 +337,7 @@ calc_sendsize_channel(int nranks, int myrank, uint64_t count, int nchannels,
   else // if (coll == ncclFuncBroadcast)
     calc_size_channel_Broadcast(nranks, myringix, count, nchannels, mychannel,
                                 nthreads, 1, root, res); // broadcast
+
   std::string szs;
   for (int i = 0; i < res.size(); ++i) {
     szs = szs + " " + std::to_string(res[i]);
@@ -347,6 +350,7 @@ static inline __attribute__((always_inline)) void
 calc_recvsize_channel(int nranks, int myrank, uint64_t count, int nchannels,
                       int mychannel, int nthreads, int coll, vector<int> &res,
                       int root) {
+
   //   auto &ringmap = global_topology.ringmap;
   //   assert(ringmap.count(make_pair(myrank, mychannel)) > 0);
   //   int target = global_topology.prev[myrank];
