@@ -28,15 +28,15 @@ namespace {
       prims(tid, nthreads, &ring->prev, &ring->next, args->sendbuff, args->recvbuff, args->redOpArg);
 
 
-  if (tid == 0) 
-  {
-    printf("[kernel] reduce_scatter ring\n");
-    printf("[tid=%d] inside reduce_scatter ring run_ring! nthread=%d, proto:id=%d "
-           "chunkSize=%lu, sizeof(T)=%lu, loopsize=%lu, "
-           "bid=%d, count=%lu, ringix=%d\n",tid,
-           nthreads, Proto::Id, chunkSize,  sizeof(T), loopSize,
-           bid, size, ring->index);
-  }
+  // if (tid == 0) 
+  // {
+  //   printf("[kernel] reduce_scatter ring\n");
+  //   printf("[tid=%d] inside reduce_scatter ring run_ring! nthread=%d, proto:id=%d "
+  //          "chunkSize=%lu, sizeof(T)=%lu, loopsize=%lu, "
+  //          "bid=%d, count=%lu, ringix=%d\n",tid,
+  //          nthreads, Proto::Id, chunkSize,  sizeof(T), loopSize,
+  //          bid, size, ring->index);
+  // }
 
 
 

@@ -205,9 +205,9 @@ class Primitives<
     int sliceSize = stepSize*StepPerSlice;
 
     sliceSize = max(divUp(nelem, 16*SlicePerChunk)*16, sliceSize/32);
-    if (tid == 0) {
-      printf("[tid=%d] prims: genericOp nelem=%d, stepsize=%d, sliceSize0=%d, sliceSize1=%d,stepSize=%d, StepPerSlice=%d SlicePerChunk %d\n", tid, nelem, (int)stepSize, (int)stepSize*StepPerSlice,sliceSize, stepSize, StepPerSlice ,SlicePerChunk);
-    }
+    // if (tid == 0) {
+    //   printf("[tid=%d] prims: genericOp nelem=%d, stepsize=%d, sliceSize0=%d, sliceSize1=%d,stepSize=%d, StepPerSlice=%d SlicePerChunk %d\n", tid, nelem, (int)stepSize, (int)stepSize*StepPerSlice,sliceSize, stepSize, StepPerSlice ,SlicePerChunk);
+    // }
 
 
     int slice = 0;
@@ -371,9 +371,9 @@ class Primitives<
     int dataSize = max(DIVUP(peerElem, 16*SlicePerChunk)*16, sliceSize/32);  // per-peer slice size
 
 
-    if (tid == 0) {
-      printf("[tid=%d] prims: scattergenericOp , stepsize=%d, sliceSize0=%d, sliceSize1=%d,stepSize=%d, StepPerSlice=%d SlicePerChunk %d\n", tid, (int)stepSize, (int)stepSize*StepPerSlice,sliceSize, stepSize, StepPerSlice ,SlicePerChunk);
-    }
+    // if (tid == 0) {
+    //   printf("[tid=%d] prims: scattergenericOp , stepsize=%d, sliceSize0=%d, sliceSize1=%d,stepSize=%d, StepPerSlice=%d SlicePerChunk %d\n", tid, (int)stepSize, (int)stepSize*StepPerSlice,sliceSize, stepSize, StepPerSlice ,SlicePerChunk);
+    // }
 
 
 
@@ -563,11 +563,11 @@ class Primitives<
     ):
     tid(tid), nthreads(nthreads), tidInBlock(threadIdx.x), group(group),
     stepSize(stepSize_ == 0 ? ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE]/NCCL_STEPS/sizeof(T) : stepSize_) {
-    if (tid == 0) {
-      printf("At primitives init: nthreads=%d, tid=%d, tidInBlk=%d, group=%d,stepsize_=%d, bufsize=%d, ncclstep=%d\n",
-             nthreads, tid, tidInBlock, group, stepSize_,
-             ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE], NCCL_STEPS);
-    }
+    // if (tid == 0) {
+    //   printf("At primitives init: nthreads=%d, tid=%d, tidInBlk=%d, group=%d,stepsize_=%d, bufsize=%d, ncclstep=%d\n",
+    //          nthreads, tid, tidInBlock, group, stepSize_,
+    //          ncclShmem.comm.buffSizes[NCCL_PROTO_SIMPLE], NCCL_STEPS);
+    // }
     // For send operations, we need an extra warp to overlap the threadfence and
     // the copy
     this->nworkers = nthreads - (MaxSend > 0 && nthreads-WARP_SIZE >= 64 ? WARP_SIZE : 0);

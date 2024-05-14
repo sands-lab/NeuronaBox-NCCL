@@ -326,6 +326,9 @@ calc_sendsize_channel(int nranks, int myrank, uint64_t count, int nchannels,
   if (coll == ncclFuncAllReduce)
     calc_size_channel_AllReduce(nranks, myringix, count, nchannels, mychannel,
                                 nthreads, sizeof(float), res);
+  else if (coll == ncclFuncReduceScatter)
+    calc_size_channel_ReduceScatter(nranks, myringix, count, nchannels,
+                                    mychannel, nthreads, sizeof(float), res);
   else if (coll == ncclFuncAllGather)
     calc_size_channel_AllGather(nranks, myringix, count, nchannels, mychannel,
                                 nthreads, 1, res); // allgather
@@ -355,6 +358,9 @@ calc_recvsize_channel(int nranks, int myrank, uint64_t count, int nchannels,
   if (coll == ncclFuncAllReduce)
     calc_size_channel_AllReduce(nranks, target_ringix, count, nchannels,
                                 mychannel, nthreads, sizeof(float), res);
+  else if (coll == ncclFuncReduceScatter)
+    calc_size_channel_ReduceScatter(nranks, target_ringix, count, nchannels,
+                                    mychannel, nthreads, sizeof(float), res);
   else if (coll == ncclFuncAllGather)
     calc_size_channel_AllGather(nranks, target_ringix, count, nchannels,
                                 mychannel, nthreads, 1, res); // allgather
