@@ -17,6 +17,7 @@ using namespace std;
 modController global_controller;
 
 
+
 static void calc_size_inkernel(int coll, int nelem, int tsize,vector<int> &res) {
   LOG_MOD(NCCL_MOD, "calc_size_inkernel: nelem=%d", nelem);
   int stepSize = (coll == ncclFuncAllGather || coll == ncclFuncAllReduce ||
@@ -31,6 +32,7 @@ static void calc_size_inkernel(int coll, int nelem, int tsize,vector<int> &res) 
                       coll == ncclFuncReduceScatter)
                          ? 2
                          : 1; //! i don't know why
+
   int sliceSize = stepSize * StepPerSlice;
   sliceSize = std::max(DIVUP(nelem, 16 * SlicePerChunk) * 16, sliceSize / 32);
   int offset = 0, slice = 0;
@@ -68,6 +70,7 @@ static void calc_size_channel_AllReduce(int nranks, int ringindex, uint64_t coun
     // if proto == Simple
     realChunkSize =
         min((uint64_t)chunkSize, (uint64_t)DIVUP(size - gridOffset, nchannels * nranks));
+
     realChunkSize =
         ROUNDUP(realChunkSize, (nthreads - 32) * sizeof(uint64_t) / tsize);
     realChunkSize = int(realChunkSize);
@@ -93,12 +96,15 @@ static void calc_size_channel_AllReduce(int nranks, int ringindex, uint64_t coun
     calc_size_inkernel(ncclFuncAllReduce, nelem, tsize,res);
 
 
+
     // k-2 steps: reduce and copy to next GPU
     for (int j = 2; j < nranks; ++j) {
       chunk = modRanks(ringIx + nranks - j);
       offset = calcOffset(chunk);
       nelem = std::min(realChunkSize, size - offset);
+
       calc_size_inkernel(ncclFuncAllReduce, nelem, tsize, res);
+
     }
 
     // step k-1: reduce this buffer and data, which will produce the final
@@ -106,7 +112,9 @@ static void calc_size_channel_AllReduce(int nranks, int ringindex, uint64_t coun
     chunk = ringIx + 0;
     offset = calcOffset(chunk);
     nelem = std::min(realChunkSize, size - offset);
+
     calc_size_inkernel(ncclFuncAllReduce, nelem, tsize, res);
+
 
     // k-2 steps: copy to next GPU
     for (int j = 1; j < nranks - 1; ++j) {
@@ -299,6 +307,7 @@ void calc_size_channel_ReduceScatter(int nranks, int ringindex, uint64_t count,
       offset = chunkOffset + rankDest * size;
       //prims.recvReduceSend(offset, nelem);
       calc_size_inkernel(ncclFuncReduceScatter, nelem, tsize, res);
+
     }
 
     // step k-1: reduce this buffer and data, which will produce the final result
@@ -353,7 +362,6 @@ static inline __attribute__((always_inline)) void
 calc_recvsize_channel(int nranks, int myrank, uint64_t count, int nchannels,
                       int mychannel, int nthreads, int coll, vector<int> &res,
                       int root) {
-
   //   auto &ringmap = global_topology.ringmap;
   //   assert(ringmap.count(make_pair(myrank, mychannel)) > 0);
   //   int target = global_topology.prev[myrank];
